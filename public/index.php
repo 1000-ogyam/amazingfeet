@@ -79,6 +79,9 @@ $routes = [
     ['GET',  '/logout',                   'AuthController',     'logout',           []],
     ['GET',  '/unauthorized',             'AuthController',     'unauthorized',     []],
 
+    // ── Help / User guide (both roles) ────────────────────────
+    ['GET',  '/help',                     'HelpController',     'manual',           ['login']],
+
     // ── POS (both roles) ──────────────────────────────────────
     ['GET',  '/pos',                      'PosController',      'index',            ['login']],
     ['POST', '/pos/sale',                 'PosController',      'processSale',      ['login']],

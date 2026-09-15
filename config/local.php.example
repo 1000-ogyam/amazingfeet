@@ -1,0 +1,18 @@
+<?php
+/**
+ * Copy this file to local.php on the server and fill in hosting credentials.
+ * local.php is gitignored — do not commit real passwords.
+ */
+return [
+    'DB_HOST' => 'localhost',
+    'DB_NAME' => 'your_db_name',
+    'DB_USER' => 'your_db_user',
+    'DB_PASS' => 'your_db_password',
+
+    // Optional overrides (auto-detected if omitted):
+    // 'APP_URL'   => 'https://amazingfeetgh.com',
+    // 'BASE_PATH' => '',  // empty string = site at domain root
+
+    // 'ARKESEL_API_KEY' => '',
+    // 'ARKESEL_SENDER'  => 'AmazingFeet',
+];

@@ -110,12 +110,26 @@
           <span class="nav-text">Locations</span>
         </a>
       </div>
+      <div class="nav-group">
+        <span class="nav-label">Help</span>
+        <a href="<?= BASE_PATH ?>/help" class="nav-item <?= str_contains($cp??'','/help')?'active':'' ?>" title="User Guide">
+          <span class="ni"><i class="fa-solid fa-book-open" aria-hidden="true"></i></span>
+          <span class="nav-text">User Guide</span>
+        </a>
+      </div>
       <?php else: ?>
       <div class="nav-group">
         <span class="nav-label">Sales</span>
-        <a href="<?= BASE_PATH ?>/pos" class="nav-item active" title="POS Terminal">
+        <a href="<?= BASE_PATH ?>/pos" class="nav-item <?= str_contains($cp??'','/pos')?'active':'' ?>" title="POS Terminal">
           <span class="ni"><i class="fa-solid fa-cart-shopping" aria-hidden="true"></i></span>
           <span class="nav-text">POS Terminal</span>
+        </a>
+      </div>
+      <div class="nav-group">
+        <span class="nav-label">Help</span>
+        <a href="<?= BASE_PATH ?>/help" class="nav-item <?= str_contains($cp??'','/help')?'active':'' ?>" title="User Guide">
+          <span class="ni"><i class="fa-solid fa-book-open" aria-hidden="true"></i></span>
+          <span class="nav-text">User Guide</span>
         </a>
       </div>
       <?php endif; ?>

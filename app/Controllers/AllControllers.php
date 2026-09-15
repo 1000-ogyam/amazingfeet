@@ -444,3 +444,14 @@ class ApiController {
         $this->json(['ok' => true]);
     }
 }
+
+// ════════════════════════════════════════════════════════════
+//  HelpController — in-app user guide
+// ════════════════════════════════════════════════════════════
+class HelpController {
+    public function manual(): void {
+        view('help/manual', [
+            'isOwner' => isOwner(),
+        ]);
+    }
+}

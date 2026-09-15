@@ -22,6 +22,7 @@
   <?php if (isOwner()): ?>
   <a href="<?= BASE_PATH ?>/dashboard" class="btn btn-ghost btn-sm pos-topbar-btn"><i class="fa-solid fa-chart-pie" aria-hidden="true"></i> <span>Dashboard</span></a>
   <?php endif; ?>
+  <a href="<?= BASE_PATH ?>/help" class="btn btn-ghost btn-sm pos-topbar-btn"><i class="fa-solid fa-book-open" aria-hidden="true"></i> <span>Guide</span></a>
   <a href="<?= BASE_PATH ?>/logout" class="btn btn-ghost btn-sm pos-topbar-btn"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> <span>Logout</span></a>
 </div>
 
