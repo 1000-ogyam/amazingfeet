@@ -94,6 +94,10 @@
           <span class="ni"><i class="fa-solid fa-location-dot" aria-hidden="true"></i></span>
           <span class="nav-text">Location Report</span>
         </a>
+        <a href="<?= BASE_PATH ?>/assessments" class="nav-item <?= str_contains($cp??'','/assessments')?'active':'' ?>" title="Staff Daily Assessments">
+          <span class="ni"><i class="fa-solid fa-clipboard-user" aria-hidden="true"></i></span>
+          <span class="nav-text">Staff Assessments</span>
+        </a>
       </div>
       <div class="nav-group">
         <span class="nav-label">Manage</span>
@@ -105,8 +109,8 @@
           <span class="ni"><i class="fa-solid fa-address-book" aria-hidden="true"></i></span>
           <span class="nav-text">Customers</span>
         </a>
-        <a href="<?= BASE_PATH ?>/locations" class="nav-item <?= str_contains($cp??'','/locations')?'active':'' ?>" title="Locations">
-          <span class="ni"><i class="fa-solid fa-location-dot" aria-hidden="true"></i></span>
+        <a href="<?= BASE_PATH ?>/locations" class="nav-item <?= ($cp??'')==='/locations' || str_starts_with($cp??'','/locations/')?'active':'' ?>" title="Locations">
+          <span class="ni"><i class="fa-solid fa-store" aria-hidden="true"></i></span>
           <span class="nav-text">Locations</span>
         </a>
       </div>
@@ -123,6 +127,10 @@
         <a href="<?= BASE_PATH ?>/pos" class="nav-item <?= str_contains($cp??'','/pos')?'active':'' ?>" title="POS Terminal">
           <span class="ni"><i class="fa-solid fa-cart-shopping" aria-hidden="true"></i></span>
           <span class="nav-text">POS Terminal</span>
+        </a>
+        <a href="<?= BASE_PATH ?>/assessment" class="nav-item <?= str_contains($cp??'','/assessment')?'active':'' ?>" title="Daily Report">
+          <span class="ni"><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i></span>
+          <span class="nav-text">Daily Report</span>
         </a>
       </div>
       <div class="nav-group">
@@ -159,6 +167,7 @@
       <div class="topbar-actions">
         <a href="<?= BASE_PATH ?>/pos" class="btn btn-primary btn-sm no-print topbar-pos-btn"><i class="fa-solid fa-cart-shopping" aria-hidden="true"></i> <span>Open POS</span></a>
         <?php if (isOwner()): ?>
+        <a href="<?= BASE_PATH ?>/assessments" class="btn btn-ghost btn-sm no-print" title="Staff assessments"><i class="fa-solid fa-clipboard-user" aria-hidden="true"></i> <span>Assessments</span></a>
         <div class="topbar-alerts">
           <button type="button" class="btn btn-ghost btn-sm topbar-icon-btn" id="alertBtn" title="Low stock alerts" aria-label="Low stock alerts"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></button>
           <span id="alertDot" class="alert-dot" hidden></span>

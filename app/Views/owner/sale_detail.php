@@ -49,7 +49,7 @@ $margin      = $sale['total']>0 ? round($grossProfit/$sale['total']*100) : 0;
             <tr>
               <td>
                 <div class="font-bold text-sm"><?= e($item['name']) ?></div>
-                <div class="text-muted" style="font-size:.72rem"><?= e($item['gender']) ?><?= $item['design']?' · '.e($item['design']):'' ?></div>
+                <div class="text-muted" style="font-size:.72rem"><?= e($item['gender']) ?><?= $item['design']?' · '.e($item['design']):'' ?><?= !empty($item['sku'])?' · SKU '.e($item['sku']):'' ?></div>
               </td>
               <td><strong>Sz <?= e($item['size']) ?></strong></td>
               <td><?= $item['quantity'] ?></td>

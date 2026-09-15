@@ -1,7 +1,7 @@
 <?php $pageTitle='Products'; $cp='/products'; ob_start(); ?>
 <div class="flex-center gap-2 mb-2" style="flex-wrap:wrap">
   <form method="GET" class="flex-center gap-1" style="flex:1;flex-wrap:wrap">
-    <input type="text" name="search" value="<?= e($_GET['search']??'') ?>" placeholder="Search products…" style="max-width:200px">
+    <input type="text" name="search" value="<?= e($_GET['search']??'') ?>" placeholder="Search name, SKU, barcode…" style="max-width:220px">
     <select name="category_id" style="max-width:160px">
       <option value="">All Categories</option>
       <?php foreach ($categories as $c): ?>
@@ -41,13 +41,13 @@
     <table>
       <thead>
         <tr>
-          <th>Product</th><th>Category</th><th>Gender</th><th>Design</th><th>Size</th>
+          <th>Product</th><th>SKU</th><th>Category</th><th>Gender</th><th>Design</th><th>Size</th>
           <th>Selling Price</th><th>Cost Price</th><th>Margin</th><th>Stock</th><th>Actions</th>
         </tr>
       </thead>
       <tbody>
         <?php if (empty($products)): ?>
-        <tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--muted)">No products found.</td></tr>
+        <tr><td colspan="11" style="text-align:center;padding:2rem;color:var(--muted)">No products found.</td></tr>
         <?php endif; ?>
         <?php foreach ($products as $p):
           $margin = $p['selling_price']>0 ? round(($p['selling_price']-$p['cost_price'])/$p['selling_price']*100) : 0;
@@ -55,6 +55,7 @@
         ?>
         <tr>
           <td style="font-weight:600;font-size:.875rem"><?= e($p['name']) ?></td>
+          <td class="mono text-sm"><?= e($p['sku'] ?? '—') ?></td>
           <td><span class="badge badge-<?= str_contains(strtolower($p['category_name']),'school')?'school':(str_contains(strtolower($p['category_name']),'ladies')?'ladies':'preloved') ?>"><?= e($p['category_name']) ?></span></td>
           <td><span class="badge badge-<?= strtolower($p['gender']) ?>"><?= e($p['gender']) ?></span></td>
           <td class="text-sm text-muted"><?= e($p['design']??'—') ?></td>

@@ -8,9 +8,15 @@ class ProductModel {
         if (!empty($f['category_id'])) { $w[] = 'p.category_id = ?'; $params[] = $f['category_id']; }
         if (!empty($f['gender']))      { $w[] = 'p.gender = ?';      $params[] = $f['gender']; }
         if (!empty($f['search'])) {
-            $w[] = '(p.name LIKE ? OR p.design LIKE ? OR p.barcode LIKE ? OR p.size LIKE ?)';
-            $q = '%'.$f['search'].'%';
-            array_push($params, $q, $q, $q, $q);
+            if ($this->hasSkuColumn()) {
+                $w[] = '(p.name LIKE ? OR p.design LIKE ? OR p.barcode LIKE ? OR p.sku LIKE ? OR p.size LIKE ?)';
+                $q = '%'.$f['search'].'%';
+                array_push($params, $q, $q, $q, $q, $q);
+            } else {
+                $w[] = '(p.name LIKE ? OR p.design LIKE ? OR p.barcode LIKE ? OR p.size LIKE ?)';
+                $q = '%'.$f['search'].'%';
+                array_push($params, $q, $q, $q, $q);
+            }
         }
         if (!empty($f['low_stock'])) { $w[] = 'p.quantity <= p.low_stock_threshold'; }
         $sql = "SELECT p.*, c.name AS category_name
@@ -29,8 +35,30 @@ class ProductModel {
     }
 
     public function findByBarcode(string $bc): ?array {
-        $stmt = $this->db->prepare("SELECT p.*, c.name AS category_name FROM products p JOIN categories c ON p.category_id=c.id WHERE p.barcode=? AND p.is_active=1");
-        $stmt->execute([$bc]);
+        return $this->findByCode($bc);
+    }
+
+    /** Find active product by SKU or barcode. */
+    public function findByCode(string $code): ?array {
+        $code = trim($code);
+        if ($code === '') return null;
+        if ($this->hasSkuColumn()) {
+            $stmt = $this->db->prepare("
+                SELECT p.*, c.name AS category_name
+                FROM products p JOIN categories c ON p.category_id=c.id
+                WHERE p.is_active=1 AND (p.sku=? OR p.barcode=?)
+                LIMIT 1
+            ");
+            $stmt->execute([$code, $code]);
+        } else {
+            $stmt = $this->db->prepare("
+                SELECT p.*, c.name AS category_name
+                FROM products p JOIN categories c ON p.category_id=c.id
+                WHERE p.is_active=1 AND p.barcode=?
+                LIMIT 1
+            ");
+            $stmt->execute([$code]);
+        }
         return $stmt->fetch() ?: null;
     }
 
@@ -51,9 +79,15 @@ class ProductModel {
             $params[] = $gender;
         }
         if ($q !== null && trim($q) !== '') {
-            $w[] = '(p.name LIKE ? OR p.design LIKE ? OR p.size LIKE ? OR p.barcode LIKE ? OR p.gender LIKE ?)';
-            $like = '%' . trim($q) . '%';
-            array_push($params, $like, $like, $like, $like, $like);
+            if ($this->hasSkuColumn()) {
+                $w[] = '(p.name LIKE ? OR p.design LIKE ? OR p.size LIKE ? OR p.barcode LIKE ? OR p.sku LIKE ? OR p.gender LIKE ?)';
+                $like = '%' . trim($q) . '%';
+                array_push($params, $like, $like, $like, $like, $like, $like);
+            } else {
+                $w[] = '(p.name LIKE ? OR p.design LIKE ? OR p.size LIKE ? OR p.barcode LIKE ? OR p.gender LIKE ?)';
+                $like = '%' . trim($q) . '%';
+                array_push($params, $like, $like, $like, $like, $like);
+            }
         }
         $where = implode(' AND ', $w);
         $groupExpr = $this->hasStyleKeyColumn()
@@ -117,6 +151,7 @@ class ProductModel {
                     return [
                         'id'            => (int)$v['id'],
                         'size'          => $v['size'],
+                        'sku'           => $v['sku'] ?? null,
                         'selling_price' => (float)$v['selling_price'],
                         'cost_price'    => (float)$v['cost_price'],
                         'quantity'      => (int)$v['quantity'],
@@ -140,20 +175,38 @@ class ProductModel {
     }
 
     public function search(string $q, int $limit = 12): array {
-        $stmt = $this->db->prepare("
-            SELECT p.*, c.name AS category_name FROM products p
-            JOIN categories c ON p.category_id=c.id
-            WHERE p.is_active=1 AND p.quantity > 0
-              AND (p.name LIKE ? OR p.design LIKE ? OR p.size LIKE ? OR p.barcode LIKE ? OR p.gender LIKE ?)
-            ORDER BY p.name, p.size+0 LIMIT ?
-        ");
-        $like = '%'.$q.'%';
-        $stmt->bindValue(1, $like);
-        $stmt->bindValue(2, $like);
-        $stmt->bindValue(3, $like);
-        $stmt->bindValue(4, $like);
-        $stmt->bindValue(5, $like);
-        $stmt->bindValue(6, $limit, PDO::PARAM_INT);
+        if ($this->hasSkuColumn()) {
+            $stmt = $this->db->prepare("
+                SELECT p.*, c.name AS category_name FROM products p
+                JOIN categories c ON p.category_id=c.id
+                WHERE p.is_active=1 AND p.quantity > 0
+                  AND (p.name LIKE ? OR p.design LIKE ? OR p.size LIKE ? OR p.barcode LIKE ? OR p.sku LIKE ? OR p.gender LIKE ?)
+                ORDER BY p.name, p.size+0 LIMIT ?
+            ");
+            $like = '%'.$q.'%';
+            $stmt->bindValue(1, $like);
+            $stmt->bindValue(2, $like);
+            $stmt->bindValue(3, $like);
+            $stmt->bindValue(4, $like);
+            $stmt->bindValue(5, $like);
+            $stmt->bindValue(6, $like);
+            $stmt->bindValue(7, $limit, PDO::PARAM_INT);
+        } else {
+            $stmt = $this->db->prepare("
+                SELECT p.*, c.name AS category_name FROM products p
+                JOIN categories c ON p.category_id=c.id
+                WHERE p.is_active=1 AND p.quantity > 0
+                  AND (p.name LIKE ? OR p.design LIKE ? OR p.size LIKE ? OR p.barcode LIKE ? OR p.gender LIKE ?)
+                ORDER BY p.name, p.size+0 LIMIT ?
+            ");
+            $like = '%'.$q.'%';
+            $stmt->bindValue(1, $like);
+            $stmt->bindValue(2, $like);
+            $stmt->bindValue(3, $like);
+            $stmt->bindValue(4, $like);
+            $stmt->bindValue(5, $like);
+            $stmt->bindValue(6, $limit, PDO::PARAM_INT);
+        }
         $stmt->execute();
         return $stmt->fetchAll();
     }
@@ -174,8 +227,34 @@ class ProductModel {
         return $has;
     }
 
+    private function hasSkuColumn(): bool {
+        static $has = null;
+        if ($has !== null) return $has;
+        try {
+            $this->db->query('SELECT sku FROM products LIMIT 1');
+            $has = true;
+        } catch (Throwable $e) {
+            $has = false;
+        }
+        return $has;
+    }
+
     public function create(array $d): int {
-        if ($this->hasStyleKeyColumn()) {
+        $sku = trim((string)($d['sku'] ?? '')) ?: null;
+        $barcode = trim((string)($d['barcode'] ?? '')) ?: null;
+        $hasSku = $this->hasSkuColumn();
+        if ($this->hasStyleKeyColumn() && $hasSku) {
+            $stmt = $this->db->prepare("
+                INSERT INTO products (style_key,category_id,name,gender,design,size,sku,barcode,cost_price,selling_price,quantity,low_stock_threshold,image)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ");
+            $stmt->execute([
+                $d['style_key'] ?? $this->newStyleKey(),
+                $d['category_id'],$d['name'],$d['gender'],$d['design'],$d['size'],
+                $sku, $barcode, $d['cost_price'],$d['selling_price'],$d['quantity'],
+                $d['low_stock_threshold']??LOW_STOCK_THRESHOLD,$d['image']??null,
+            ]);
+        } elseif ($this->hasStyleKeyColumn()) {
             $stmt = $this->db->prepare("
                 INSERT INTO products (style_key,category_id,name,gender,design,size,barcode,cost_price,selling_price,quantity,low_stock_threshold,image)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
@@ -183,16 +262,24 @@ class ProductModel {
             $stmt->execute([
                 $d['style_key'] ?? $this->newStyleKey(),
                 $d['category_id'],$d['name'],$d['gender'],$d['design'],$d['size'],
-                $d['barcode']??null,$d['cost_price'],$d['selling_price'],$d['quantity'],
+                $barcode, $d['cost_price'],$d['selling_price'],$d['quantity'],
                 $d['low_stock_threshold']??LOW_STOCK_THRESHOLD,$d['image']??null,
             ]);
+        } elseif ($hasSku) {
+            $stmt = $this->db->prepare("
+                INSERT INTO products (category_id,name,gender,design,size,sku,barcode,cost_price,selling_price,quantity,low_stock_threshold,image)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            ");
+            $stmt->execute([$d['category_id'],$d['name'],$d['gender'],$d['design'],$d['size'],
+                $sku, $barcode, $d['cost_price'],$d['selling_price'],$d['quantity'],
+                $d['low_stock_threshold']??LOW_STOCK_THRESHOLD,$d['image']??null]);
         } else {
             $stmt = $this->db->prepare("
                 INSERT INTO products (category_id,name,gender,design,size,barcode,cost_price,selling_price,quantity,low_stock_threshold,image)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?)
             ");
             $stmt->execute([$d['category_id'],$d['name'],$d['gender'],$d['design'],$d['size'],
-                $d['barcode']??null,$d['cost_price'],$d['selling_price'],$d['quantity'],
+                $barcode, $d['cost_price'],$d['selling_price'],$d['quantity'],
                 $d['low_stock_threshold']??LOW_STOCK_THRESHOLD,$d['image']??null]);
         }
         return (int)$this->db->lastInsertId();
@@ -215,6 +302,7 @@ class ProductModel {
                     'gender'              => $shared['gender'],
                     'design'              => $shared['design'] ?? null,
                     'size'                => $size,
+                    'sku'                 => ($row['sku'] ?? '') !== '' ? trim((string)$row['sku']) : null,
                     'barcode'             => ($row['barcode'] ?? '') !== '' ? trim((string)$row['barcode']) : null,
                     'cost_price'          => (float)($row['cost_price'] ?? $shared['cost_price'] ?? 0),
                     'selling_price'       => (float)($row['selling_price'] ?? 0),
@@ -307,6 +395,7 @@ class ProductModel {
             'gender'              => $p['gender'],
             'design'              => $p['design'],
             'size'                => trim((string)$row['size']),
+            'sku'                 => ($row['sku'] ?? '') !== '' ? trim((string)$row['sku']) : null,
             'barcode'             => ($row['barcode'] ?? '') !== '' ? trim((string)$row['barcode']) : null,
             'cost_price'          => (float)($row['cost_price'] ?? $p['cost_price']),
             'selling_price'       => (float)$row['selling_price'],
@@ -340,16 +429,13 @@ class ProductModel {
         }
 
         $stmt = $this->db->prepare("
-            UPDATE products SET size=?, barcode=?, cost_price=?, selling_price=?
+            UPDATE products SET size=?, ".($this->hasSkuColumn() ? 'sku=?,' : '')." barcode=?, cost_price=?, selling_price=?
             WHERE id=?
         ");
-        return $stmt->execute([
-            $d['size'],
-            $d['barcode'] ?? null,
-            $d['cost_price'],
-            $d['selling_price'],
-            $id,
-        ]);
+        $params = [$d['size']];
+        if ($this->hasSkuColumn()) $params[] = trim((string)($d['sku'] ?? '')) ?: null;
+        array_push($params, $d['barcode'] ?? null, $d['cost_price'], $d['selling_price'], $id);
+        return $stmt->execute($params);
     }
 
     public function deductStock(int $id, int $qty): void {

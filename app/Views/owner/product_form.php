@@ -52,9 +52,16 @@ ob_start();
             <input type="text" name="size" required value="<?= e($product['size']??'') ?>" placeholder="e.g. 30">
           </div>
           <div class="form-group">
-            <label>Barcode (optional)</label>
-            <input type="text" name="barcode" value="<?= e($product['barcode']??'') ?>" placeholder="e.g. AF-B-CB-30" class="mono">
+            <label>SKU code</label>
+            <input type="text" name="sku" value="<?= e($product['sku']??'') ?>" placeholder="e.g. AF-SCH-BLK-30" class="mono">
           </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Barcode (optional)</label>
+            <input type="text" name="barcode" value="<?= e($product['barcode']??'') ?>" placeholder="Scan / EAN barcode" class="mono">
+          </div>
+          <div class="form-group"></div>
         </div>
 
         <div class="form-row">
@@ -74,15 +81,16 @@ ob_start();
         </div>
         <?php else: ?>
         <div class="form-group">
-          <label>Sizes &amp; prices *</label>
-          <p class="text-muted text-sm" style="margin:-.25rem 0 .65rem">Same product, different sizes can each have their own cost, selling price, and stock. POS groups them and lets staff pick a size.</p>
-          <div class="table-wrap" style="border:1px solid var(--border);border-radius:8px">
-            <table id="sizeTable">
+          <label>Sizes, SKU codes &amp; prices *</label>
+          <p class="text-muted text-sm" style="margin:-.25rem 0 .65rem">Each size can have its own <strong>SKU</strong>, cost, selling price, stock, and barcode. POS groups them and shows the SKU when you pick a size.</p>
+          <div class="table-wrap" style="border:1px solid var(--border);border-radius:8px;overflow-x:auto">
+            <table id="sizeTable" style="min-width:640px">
               <thead>
                 <tr>
-                  <th>Size</th>
+                  <th>Size *</th>
+                  <th>SKU code</th>
                   <th>Cost (GHS)</th>
-                  <th>Sell (GHS)</th>
+                  <th>Sell (GHS) *</th>
                   <th>Qty</th>
                   <th>Barcode</th>
                   <th></th>
@@ -178,11 +186,12 @@ ob_start();
         <p class="text-muted text-sm">Each size keeps its own price and stock. Editing name/category/design updates the whole style.</p>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Size</th><th>Sell</th><th>Stock</th><th></th></tr></thead>
+            <thead><tr><th>Size</th><th>SKU</th><th>Sell</th><th>Stock</th><th></th></tr></thead>
             <tbody>
               <?php foreach ($variants as $v): ?>
               <tr style="<?= (int)$v['id']===(int)$product['id']?'background:rgba(200,83,42,.06)':'' ?>">
                 <td><strong>Sz <?= e($v['size']) ?></strong></td>
+                <td class="mono text-sm"><?= e($v['sku'] ?? '—') ?></td>
                 <td class="text-sm"><?= money($v['selling_price']) ?></td>
                 <td><span class="badge <?= $v['quantity']<=$v['low_stock_threshold']?'badge-low':'badge-ok' ?>"><?= (int)$v['quantity'] ?></span></td>
                 <td>
@@ -221,9 +230,15 @@ ob_start();
               <input type="number" name="quantity" min="0" value="0">
             </div>
           </div>
-          <div class="form-group">
-            <label>Barcode</label>
-            <input type="text" name="barcode" class="mono" placeholder="Optional">
+          <div class="form-row">
+            <div class="form-group">
+              <label>SKU</label>
+              <input type="text" name="sku" class="mono" placeholder="e.g. AF-SCH-BLK-35">
+            </div>
+            <div class="form-group">
+              <label>Barcode</label>
+              <input type="text" name="barcode" class="mono" placeholder="Optional">
+            </div>
           </div>
           <button type="submit" class="btn btn-primary btn-sm w-full"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add size</button>
         </form>
@@ -257,6 +272,7 @@ function addSizeRow(prefill = {}) {
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td><input type="text" name="sizes[${i}][size]" required placeholder="30" value="${prefill.size ?? ''}" style="width:4.2rem"></td>
+    <td><input type="text" name="sizes[${i}][sku]" class="mono" value="${prefill.sku ?? ''}" placeholder="e.g. AF-30" style="min-width:8rem"></td>
     <td><input type="number" name="sizes[${i}][cost_price]" step="0.01" min="0" value="${prefill.cost ?? ''}" placeholder="0.00" style="width:6rem"></td>
     <td><input type="number" name="sizes[${i}][selling_price]" step="0.01" min="0" required value="${prefill.sell ?? ''}" placeholder="0.00" style="width:6rem"></td>
     <td><input type="number" name="sizes[${i}][quantity]" min="0" value="${prefill.qty ?? 0}" style="width:4.5rem"></td>

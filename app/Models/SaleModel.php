@@ -59,7 +59,7 @@ class SaleModel {
 
     public function getItems(int $saleId): array {
         $stmt = $this->db->prepare("
-            SELECT si.*, p.name, p.gender, p.design, p.size, p.barcode, c.name AS category_name
+            SELECT si.*, p.name, p.gender, p.design, p.size, p.sku, p.barcode, c.name AS category_name
             FROM sale_items si
             JOIN products p ON si.product_id=p.id
             JOIN categories c ON p.category_id=c.id
@@ -240,5 +240,34 @@ class SaleModel {
             WHERE YEARWEEK(s.created_at,1)=YEARWEEK(CURDATE(),1)
         ");
         return $stmt->fetch();
+    }
+
+    /** Pairs (units) sold by one staff member between two dates (inclusive). */
+    public function staffUnits(int $staffId, string $start, string $end): int {
+        $stmt = $this->db->prepare("
+            SELECT COALESCE(SUM(si.quantity),0)
+            FROM sales s
+            JOIN sale_items si ON si.sale_id = s.id
+            WHERE s.staff_id = ? AND DATE(s.created_at) BETWEEN ? AND ?
+        ");
+        $stmt->execute([$staffId, $start, $end]);
+        return (int)$stmt->fetchColumn();
+    }
+
+    /** Customer / contact counts for a staff member on one day. */
+    public function staffCustomerStats(int $staffId, string $date): array {
+        $stmt = $this->db->prepare("
+            SELECT
+              COUNT(s.id) AS customers_today,
+              SUM(CASE WHEN s.customer_id IS NOT NULL THEN 1 ELSE 0 END) AS contacts_collected
+            FROM sales s
+            WHERE s.staff_id = ? AND DATE(s.created_at) = ?
+        ");
+        $stmt->execute([$staffId, $date]);
+        $row = $stmt->fetch() ?: [];
+        return [
+            'customers_today'    => (int)($row['customers_today'] ?? 0),
+            'contacts_collected' => (int)($row['contacts_collected'] ?? 0),
+        ];
     }
 }

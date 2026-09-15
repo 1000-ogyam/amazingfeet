@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS products (
     gender          ENUM('Boys','Girls','Unisex','Ladies') NOT NULL,
     design          VARCHAR(100) NULL COMMENT 'Style/design name',
     size            VARCHAR(10) NOT NULL COMMENT 'Numeric or text size',
+    sku             VARCHAR(100) UNIQUE NULL COMMENT 'Internal SKU code for this size variant',
     barcode         VARCHAR(100) UNIQUE NULL,
     cost_price      DECIMAL(10,2) NOT NULL DEFAULT 0,
     selling_price   DECIMAL(10,2) NOT NULL DEFAULT 0,
@@ -132,6 +133,51 @@ CREATE TABLE IF NOT EXISTS stock_alerts (
     is_read    TINYINT(1) DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
+-- ─── Staff daily performance assessments ─────────────────────
+CREATE TABLE IF NOT EXISTS staff_daily_assessments (
+    id                   INT AUTO_INCREMENT PRIMARY KEY,
+    staff_id             INT NOT NULL,
+    report_date          DATE NOT NULL,
+    -- Sales snapshot (auto from POS sales)
+    pairs_day            INT NOT NULL DEFAULT 0,
+    pairs_week           INT NOT NULL DEFAULT 0,
+    pairs_month          INT NOT NULL DEFAULT 0,
+    week_target          INT NOT NULL DEFAULT 10,
+    month_target         INT NOT NULL DEFAULT 40,
+    commission_level     VARCHAR(80) NOT NULL DEFAULT 'No commission',
+    -- Customer contact
+    customers_today      INT NOT NULL DEFAULT 0,
+    contacts_collected   INT NOT NULL DEFAULT 0,
+    asked_all_customers  ENUM('yes','no') NOT NULL DEFAULT 'no',
+    -- Shop cleaning
+    floor_cleaned        ENUM('yes','no') NOT NULL DEFAULT 'no',
+    glass_cleaned        ENUM('yes','no') NOT NULL DEFAULT 'no',
+    shelves_dusted       ENUM('yes','no') NOT NULL DEFAULT 'no',
+    shoes_arranged       ENUM('yes','no') NOT NULL DEFAULT 'no',
+    counter_cleaned      ENUM('yes','no') NOT NULL DEFAULT 'no',
+    -- Washroom
+    toilet_cleaned       ENUM('yes','no') NOT NULL DEFAULT 'no',
+    sink_cleaned         ENUM('yes','no') NOT NULL DEFAULT 'no',
+    washroom_floor_ok    ENUM('yes','no') NOT NULL DEFAULT 'no',
+    tissue_soap_ok       ENUM('yes','no') NOT NULL DEFAULT 'no',
+    -- Appearance
+    neat_dressing        ENUM('yes','no') NOT NULL DEFAULT 'no',
+    clean_footwear       ENUM('yes','no') NOT NULL DEFAULT 'no',
+    hair_tidy            ENUM('yes','no') NOT NULL DEFAULT 'no',
+    presentation_ok      ENUM('yes','no') NOT NULL DEFAULT 'no',
+    -- WhatsApp
+    whatsapp_posted      ENUM('yes','no') NOT NULL DEFAULT 'no',
+    whatsapp_content     VARCHAR(255) NULL,
+    -- Customer experience
+    has_complaints       ENUM('yes','no') NOT NULL DEFAULT 'no',
+    complaints_detail    TEXT NULL,
+    notes                TEXT NULL,
+    created_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_staff_day (staff_id, report_date),
+    FOREIGN KEY (staff_id) REFERENCES users(id)
 );
 
 -- ═══════════════════════════════════════════════════════════

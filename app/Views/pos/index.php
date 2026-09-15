@@ -21,6 +21,9 @@
   <span class="pos-clock" id="clock"></span>
   <?php if (isOwner()): ?>
   <a href="<?= BASE_PATH ?>/dashboard" class="btn btn-ghost btn-sm pos-topbar-btn"><i class="fa-solid fa-chart-pie" aria-hidden="true"></i> <span>Dashboard</span></a>
+  <a href="<?= BASE_PATH ?>/assessments" class="btn btn-ghost btn-sm pos-topbar-btn"><i class="fa-solid fa-clipboard-user" aria-hidden="true"></i> <span>Assessments</span></a>
+  <?php else: ?>
+  <a href="<?= BASE_PATH ?>/assessment" class="btn btn-ghost btn-sm pos-topbar-btn"><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i> <span>Daily Report</span></a>
   <?php endif; ?>
   <a href="<?= BASE_PATH ?>/help" class="btn btn-ghost btn-sm pos-topbar-btn"><i class="fa-solid fa-book-open" aria-hidden="true"></i> <span>Guide</span></a>
   <a href="<?= BASE_PATH ?>/logout" class="btn btn-ghost btn-sm pos-topbar-btn"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> <span>Logout</span></a>
@@ -31,8 +34,8 @@
     <div class="pos-toolbar">
       <div class="search-bar">
         <span class="search-bar-ic" aria-hidden="true"><i class="fa-solid fa-magnifying-glass"></i></span>
-        <input type="text" id="searchInput" placeholder="Search name, size, gender, design…" autocomplete="off" oninput="scheduleProductSearch(this.value)">
-        <button type="button" class="barcode-btn" id="barcodeBtn" onclick="toggleBarcodeMode()" title="Barcode scan"><i class="fa-solid fa-barcode" aria-hidden="true"></i></button>
+        <input type="text" id="searchInput" placeholder="Search name, size, SKU, barcode…" autocomplete="off" oninput="scheduleProductSearch(this.value)">
+        <button type="button" class="barcode-btn" id="barcodeBtn" onclick="toggleBarcodeMode()" title="Scan SKU or barcode"><i class="fa-solid fa-barcode" aria-hidden="true"></i></button>
       </div>
       <div class="pos-view-toggle" role="group" aria-label="Product view">
         <button type="button" class="pos-view-btn active" id="viewGridBtn" onclick="setViewMode('grid')" title="Grid view"><i class="fa-solid fa-grip" aria-hidden="true"></i></button>
@@ -52,7 +55,7 @@
     </div>
 
     <div id="barcodeWrap" class="pos-barcode-wrap" hidden>
-      <input type="text" id="barcodeInput" placeholder="Scan barcode…" autocomplete="off">
+      <input type="text" id="barcodeInput" placeholder="Scan or type SKU / barcode…" autocomplete="off">
     </div>
 
     <div class="product-grid" id="productGrid" data-view="grid">
@@ -336,6 +339,12 @@ function renderProductGrid(products) {
           <span class="pt-size">${sizeLabel}</span>
           <span class="pt-price">${priceLabel}</span>
         </div>
+        ${(() => {
+          const skus = (p.variants || []).map(v => v.sku).filter(Boolean);
+          if (!skus.length) return '';
+          const label = skus.length === 1 ? skus[0] : (skus.length + ' SKUs');
+          return `<div class="pt-sku mono">${escHtml(label)}</div>`;
+        })()}
         <div class="pt-stock">${stockLine}</div>
       </div>
     </div>`;
@@ -350,7 +359,7 @@ function openFamilyPicker(idx) {
   const variants = Array.isArray(family.variants) ? family.variants : [];
   if (variants.length === 1) {
     const v = variants[0];
-    addToCart(v.id, v.name, v.design ?? '', v.size, v.selling_price, v.cost_price, v.quantity, v.category_name, v.gender);
+    addToCart(v.id, v.name, v.design ?? '', v.size, v.selling_price, v.cost_price, v.quantity, v.category_name, v.gender, v.sku ?? '');
     return;
   }
   window.__sizePickerVariants = variants;
@@ -364,6 +373,7 @@ function openFamilyPicker(idx) {
       <button type="button" class="size-pick ${oos ? 'is-oos' : ''}" ${oos ? 'disabled' : ''}
         onclick="pickVariantAt(${i})">
         <span class="size-pick-sz">Sz ${escHtml(String(v.size))}</span>
+        ${v.sku ? `<span class="size-pick-sku mono">${escHtml(String(v.sku))}</span>` : ''}
         <span class="size-pick-price">GHS ${parseFloat(v.selling_price).toFixed(2)}</span>
         <span class="size-pick-stock">${oos ? 'Out of stock' : (v.quantity + ' left')}</span>
       </button>`;
@@ -374,7 +384,7 @@ function openFamilyPicker(idx) {
 function pickVariantAt(i) {
   const v = (window.__sizePickerVariants || [])[i];
   if (!v) return;
-  addToCart(v.id, v.name, v.design ?? '', v.size, v.selling_price, v.cost_price, v.quantity, v.category_name, v.gender);
+  addToCart(v.id, v.name, v.design ?? '', v.size, v.selling_price, v.cost_price, v.quantity, v.category_name, v.gender, v.sku ?? '');
   closeSizeModal();
 }
 
@@ -417,7 +427,7 @@ document.getElementById('barcodeInput').addEventListener('keydown', async e => {
   const d = await r.json();
   if (d.found) {
     const p = d.product;
-    addToCart(p.id, p.name, p.design ?? '', p.size, p.selling_price, p.cost_price, p.quantity, p.category_name, p.gender);
+    addToCart(p.id, p.name, p.design ?? '', p.size, p.selling_price, p.cost_price, p.quantity, p.category_name, p.gender, p.sku ?? '');
     e.target.value = '';
   } else {
     e.target.style.borderColor = 'var(--danger)';
@@ -425,13 +435,13 @@ document.getElementById('barcodeInput').addEventListener('keydown', async e => {
   }
 });
 
-function addToCart(id, name, design, size, price, cost, stock, category, gender) {
+function addToCart(id, name, design, size, price, cost, stock, category, gender, sku) {
   const existing = cart.find(i => i.product_id == id);
   if (existing) {
     if (existing.qty >= stock) return;
     existing.qty++;
   } else {
-    cart.push({ product_id: id, name, design, size, price: parseFloat(price), cost: parseFloat(cost), stock: parseInt(stock), category, gender, qty: 1 });
+    cart.push({ product_id: id, name, design, size, sku: sku || '', price: parseFloat(price), cost: parseFloat(cost), stock: parseInt(stock), category, gender, qty: 1 });
   }
   renderCart();
 }
@@ -461,7 +471,7 @@ function renderCart() {
     <div class="cart-item">
       <div class="ci-info">
         <div class="ci-name">${escHtml(item.name)}</div>
-        <div class="ci-detail">Sz ${escHtml(item.size)} · ${escHtml(item.gender)}${item.design ? ' · ' + escHtml(item.design) : ''}</div>
+        <div class="ci-detail">Sz ${escHtml(item.size)}${item.sku ? ' · ' + escHtml(item.sku) : ''} · ${escHtml(item.gender)}${item.design ? ' · ' + escHtml(item.design) : ''}</div>
       </div>
       <div class="qty-control">
         <button type="button" class="qty-btn" onclick="updateQty(${item.product_id},-1)">−</button>

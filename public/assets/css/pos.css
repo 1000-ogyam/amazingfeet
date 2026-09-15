@@ -91,6 +91,7 @@
 .pt-size{font-size:.68rem;font-weight:700;background:var(--bg3);padding:.1rem .35rem;border-radius:4px}
 .pt-price{margin-left:auto;font-weight:700;color:var(--accent);font-size:.82rem}
 .pt-stock{font-size:.65rem;color:var(--muted)}
+.pt-sku{font-size:.68rem;color:var(--muted);margin-top:.15rem;letter-spacing:.02em}
 .pt-stock-row{display:inline-flex;align-items:center;gap:.2rem;color:var(--danger);font-weight:600}
 .pt-stock-ok{display:inline}
 
@@ -173,6 +174,7 @@
 .size-pick:hover:not(:disabled){border-color:var(--accent);transform:translateY(-1px);box-shadow:var(--shadow)}
 .size-pick:disabled,.size-pick.is-oos{opacity:.45;cursor:not-allowed}
 .size-pick-sz{font-weight:700;font-size:.95rem}
+.size-pick-sku{font-size:.72rem;color:var(--muted);font-family:var(--font-mono)}
 .size-pick-price{font-weight:600;color:var(--accent);font-size:.86rem}
 .size-pick-stock{font-size:.72rem;color:var(--muted)}
 

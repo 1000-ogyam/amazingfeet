@@ -32,8 +32,10 @@ function isLoggedIn(): bool  {
     return isset($_SESSION['user_id']) && is_string($_SESSION['user_role'] ?? null) && $_SESSION['user_role'] !== '';
 }
 function isOwner(): bool     { return ($_SESSION['user_role'] ?? '') === 'owner'; }
+function isStaff(): bool     { return ($_SESSION['user_role'] ?? '') === 'staff'; }
 function requireLogin(): void { if (!isLoggedIn()) redirect('/login'); }
 function requireOwner(): void { requireLogin(); if (!isOwner()) redirect('/unauthorized'); }
+function requireStaff(): void { requireLogin(); if (!isStaff()) redirect('/unauthorized'); }
 function csrf(): string {
     if (empty($_SESSION['csrf'])) $_SESSION['csrf'] = bin2hex(random_bytes(32));
     return $_SESSION['csrf'];
@@ -82,6 +84,11 @@ $routes = [
     // ── Help / User guide (both roles) ────────────────────────
     ['GET',  '/help',                     'HelpController',     'manual',           ['login']],
 
+    // ── Staff daily assessment (staff + owner) ────────────────
+    ['GET',  '/assessment',               'AssessmentController','form',            ['login']],
+    ['POST', '/assessment',               'AssessmentController','save',            ['login']],
+    ['GET',  '/assessment/history',       'AssessmentController','myHistory',       ['login']],
+
     // ── POS (both roles) ──────────────────────────────────────
     ['GET',  '/pos',                      'PosController',      'index',            ['login']],
     ['POST', '/pos/sale',                 'PosController',      'processSale',      ['login']],
@@ -124,6 +131,10 @@ $routes = [
     ['GET',  '/reports/monthly',          'ReportController',   'monthly',          ['owner']],
     ['GET',  '/reports/staff',            'ReportController',   'staff',            ['owner']],
     ['GET',  '/reports/locations',        'ReportController',   'locations',        ['owner']],
+
+    // ── Owner: Staff daily assessments ────────────────────────
+    ['GET',  '/assessments',              'AssessmentController','index',           ['owner']],
+    ['GET',  '/assessments/{id}',         'AssessmentController','show',            ['owner']],
 
     // ── Owner: Targets ────────────────────────────────────────
     ['GET',  '/targets',                  'TargetController',   'index',            ['owner']],

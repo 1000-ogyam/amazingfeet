@@ -94,6 +94,7 @@ class ProductController {
             'gender'              => $_POST['gender'] ?? 'Unisex',
             'design'              => trim($_POST['design'] ?? '') ?: null,
             'size'                => trim($_POST['size'] ?? ''),
+            'sku'                 => trim($_POST['sku'] ?? '') ?: null,
             'barcode'             => trim($_POST['barcode'] ?? '') ?: null,
             'cost_price'          => (float)($_POST['cost_price'] ?? 0),
             'selling_price'       => (float)($_POST['selling_price'] ?? 0),
@@ -120,6 +121,7 @@ class ProductController {
         try {
             $newId = $this->pm->addSizeToFamily((int)$id, [
                 'size'          => $size,
+                'sku'           => trim($_POST['sku'] ?? '') ?: null,
                 'barcode'       => trim($_POST['barcode'] ?? '') ?: null,
                 'cost_price'    => (float)($_POST['cost_price'] ?? 0),
                 'selling_price' => $price,
@@ -133,7 +135,7 @@ class ProductController {
         }
     }
 
-    /** @return list<array{size:string,cost_price:float,selling_price:float,quantity:int,barcode:?string}> */
+    /** @return list<array{size:string,cost_price:float,selling_price:float,quantity:int,sku:?string,barcode:?string}> */
     private function parseSizeRows(mixed $raw): array {
         if (!is_array($raw)) return [];
         $out = [];
@@ -148,6 +150,7 @@ class ProductController {
                 'cost_price'    => (float)($row['cost_price'] ?? 0),
                 'selling_price' => $sell,
                 'quantity'      => (int)($row['quantity'] ?? 0),
+                'sku'           => trim((string)($row['sku'] ?? '')) ?: null,
                 'barcode'       => trim((string)($row['barcode'] ?? '')) ?: null,
             ];
         }
