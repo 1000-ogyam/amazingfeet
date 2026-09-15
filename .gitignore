@@ -1,0 +1,20 @@
+# Dependencies & env
+/vendor/
+/node_modules/
+.env
+.env.*
+!.env.example
+
+# Uploads & runtime
+/public/uploads/
+*.log
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.bak
+
+tools/tmp_*

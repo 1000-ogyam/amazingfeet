@@ -1,0 +1,46 @@
+/* Compact premium overrides — loads after app.css */
+.stats-grid{gap:.75rem;margin-bottom:1.1rem}
+.stat-card{padding:.9rem 1rem;box-shadow:var(--shadow);transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
+.stat-card:hover{transform:translateY(-1px);box-shadow:var(--shadow-lg)}
+.stat-value{font-size:1.55rem;margin:.1rem 0;line-height:1.1}
+.stat-label{font-size:.68rem;margin-bottom:.25rem}
+.stat-sub{font-size:.72rem}
+
+.card{box-shadow:var(--shadow)}
+.card-header{padding:.7rem 1rem;gap:.55rem}
+.card-header h3{font-size:.95rem}
+.card-body{padding:1rem}
+
+thead th{padding:.55rem .85rem;font-size:.66rem;border-bottom:1px solid var(--border);background:var(--bg3)}
+tbody td{padding:.55rem .85rem;font-size:.84rem}
+
+.btn{padding:.45rem .85rem;font-size:.84rem;gap:.35rem}
+.btn-sm{padding:.3rem .65rem;font-size:.78rem}
+.btn-xs{padding:.18rem .48rem;font-size:.7rem}
+.btn-ghost{border-width:1px}
+
+.alert{padding:.65rem .85rem;margin-bottom:.85rem;font-size:.84rem;border-left-width:3px}
+
+.form-group{margin-bottom:.85rem}
+label{font-size:.74rem;margin-bottom:.3rem}
+input,select,textarea{padding:.5rem .75rem;font-size:.88rem;border-width:1px}
+.form-row,.form-row-3{gap:.75rem}
+
+.progress-wrap{height:6px}
+.progress-bar{transition:width .55s var(--ease)}
+
+.chart-box{padding:1rem;box-shadow:var(--shadow)}
+.alert-bar{padding:.6rem .85rem;margin-bottom:.9rem;font-size:.88rem;gap:.65rem}
+.alert-bar .ab-count{font-size:1rem}
+
+.dash-grid-2{gap:.9rem;margin-bottom:.9rem}
+.dash-grid-chart{gap:.9rem}
+.dash-target-block{margin-bottom:.85rem}
+.dash-target-name{font-size:.82rem}
+.dash-chart-title{font-size:.95rem}
+.dash-recent-list{max-height:260px}
+.dash-recent-item{padding:.55rem .9rem;gap:.65rem}
+.dash-recent-ref{font-size:.76rem}
+.dash-recent-total{font-size:.84rem}
+
+.badge{padding:.18rem .5rem;font-size:.66rem}
