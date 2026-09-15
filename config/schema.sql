@@ -23,9 +23,11 @@ CREATE TABLE IF NOT EXISTS categories (
     sort_order INT DEFAULT 0
 );
 
--- ─── Products (each size/design = one SKU row) ───────────────
+-- ─── Products (each size = one SKU row; same style_key = one style) ──
+-- Different sizes may have different cost/selling prices and stock quantities.
 CREATE TABLE IF NOT EXISTS products (
     id              INT AUTO_INCREMENT PRIMARY KEY,
+    style_key       VARCHAR(64) NULL COMMENT 'Groups size variants of the same product style',
     category_id     INT NOT NULL,
     name            VARCHAR(150) NOT NULL,
     gender          ENUM('Boys','Girls','Unisex','Ladies') NOT NULL,
@@ -40,7 +42,8 @@ CREATE TABLE IF NOT EXISTS products (
     is_active       TINYINT(1) DEFAULT 1,
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (category_id) REFERENCES categories(id)
+    FOREIGN KEY (category_id) REFERENCES categories(id),
+    INDEX idx_products_style_key (style_key)
 );
 
 -- ─── Sale locations ───────────────────────────────────────────

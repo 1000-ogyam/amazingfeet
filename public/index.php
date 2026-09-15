@@ -98,6 +98,7 @@ $routes = [
     ['POST', '/products/create',          'ProductController',  'store',            ['owner']],
     ['GET',  '/products/{id}/edit',       'ProductController',  'edit',             ['owner']],
     ['POST', '/products/{id}/edit',       'ProductController',  'update',           ['owner']],
+    ['POST', '/products/{id}/sizes',      'ProductController',  'addSize',          ['owner']],
     ['POST', '/products/{id}/delete',     'ProductController',  'delete',           ['owner']],
     ['POST', '/products/{id}/stock',      'ProductController',  'adjustStock',      ['owner']],
 

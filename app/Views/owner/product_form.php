@@ -3,6 +3,7 @@ $isEdit = $product !== null;
 $pageTitle = $isEdit ? 'Edit Product' : 'Add Product';
 $cp = '/products';
 $backUrl = BASE_PATH.'/products';
+$variants = $variants ?? [];
 ob_start();
 ?>
 <?php if ($error): ?><div class="alert alert-error"><?= e($error) ?></div><?php endif; ?>
@@ -10,7 +11,7 @@ ob_start();
   <div class="card">
     <div class="card-header"><h3><?= $isEdit ? '<i class="fa-solid fa-pen" aria-hidden="true"></i> Edit' : '<i class="fa-solid fa-plus" aria-hidden="true"></i> Add' ?> Product</h3></div>
     <div class="card-body">
-      <form method="POST" action="<?= BASE_PATH ?>/products/<?= $isEdit?$product['id'].'/edit':'create' ?>" enctype="multipart/form-data">
+      <form method="POST" action="<?= BASE_PATH ?>/products/<?= $isEdit?$product['id'].'/edit':'create' ?>" enctype="multipart/form-data" id="productForm">
         <input type="hidden" name="csrf" value="<?= csrf() ?>">
 
         <div class="form-row">
@@ -44,10 +45,11 @@ ob_start();
           </div>
         </div>
 
+        <?php if ($isEdit): ?>
         <div class="form-row">
           <div class="form-group">
             <label>Size *</label>
-            <input type="text" name="size" required value="<?= e($product['size']??'') ?>" placeholder="e.g. 30, 31, 32…">
+            <input type="text" name="size" required value="<?= e($product['size']??'') ?>" placeholder="e.g. 30">
           </div>
           <div class="form-group">
             <label>Barcode (optional)</label>
@@ -70,24 +72,62 @@ ob_start();
           Profit Margin: <strong id="marginVal" style="color:var(--accent2)">—</strong>
           &nbsp;|&nbsp; Profit per unit: <strong id="profitVal">—</strong>
         </div>
+        <?php else: ?>
+        <div class="form-group">
+          <label>Sizes &amp; prices *</label>
+          <p class="text-muted text-sm" style="margin:-.25rem 0 .65rem">Same product, different sizes can each have their own cost, selling price, and stock. POS groups them and lets staff pick a size.</p>
+          <div class="table-wrap" style="border:1px solid var(--border);border-radius:8px">
+            <table id="sizeTable">
+              <thead>
+                <tr>
+                  <th>Size</th>
+                  <th>Cost (GHS)</th>
+                  <th>Sell (GHS)</th>
+                  <th>Qty</th>
+                  <th>Barcode</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="sizeRows"></tbody>
+            </table>
+          </div>
+          <div class="flex-center gap-1" style="margin-top:.65rem;flex-wrap:wrap">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="addSizeRow()"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add size row</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="fillSizeRange(28,40)"><i class="fa-solid fa-list-ol" aria-hidden="true"></i> Prefill 28–40</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="applyDefaultPrices()"><i class="fa-solid fa-copy" aria-hidden="true"></i> Copy first price to empty</button>
+          </div>
+          <div class="form-row" style="margin-top:.85rem">
+            <div class="form-group">
+              <label>Default cost (optional helper)</label>
+              <input type="number" id="defaultCost" step="0.01" min="0" placeholder="Fill into empty cost cells">
+            </div>
+            <div class="form-group">
+              <label>Default sell price (optional helper)</label>
+              <input type="number" id="defaultSell" step="0.01" min="0" placeholder="Fill into empty sell cells">
+            </div>
+          </div>
+        </div>
+        <?php endif; ?>
 
         <div class="form-row">
-          <div class="form-group">
-            <label>Quantity in Stock *</label>
-            <input type="number" name="quantity" required min="0" value="<?= e($product['quantity']??0) ?>">
-          </div>
+          <?php if ($isEdit): ?>
           <div class="form-group">
             <label>Low Stock Alert Threshold</label>
             <input type="number" name="low_stock_threshold" min="1" value="<?= e($product['low_stock_threshold']??LOW_STOCK_THRESHOLD) ?>">
           </div>
-        </div>
-
-        <div class="form-group">
-          <label>Product Image (optional)</label>
-          <input type="file" name="image" accept="image/jpeg,image/png,image/webp" style="padding:.4rem">
-          <?php if ($isEdit && $product['image']): ?>
-          <img src="<?= UPLOAD_URL.e($product['image']) ?>" style="width:80px;border-radius:7px;margin-top:.5rem;border:1px solid var(--border)">
+          <?php else: ?>
+          <div class="form-group">
+            <label>Low Stock Alert Threshold</label>
+            <input type="number" name="low_stock_threshold" min="1" value="<?= e(LOW_STOCK_THRESHOLD) ?>">
+          </div>
           <?php endif; ?>
+          <div class="form-group">
+            <label>Product Image (optional)</label>
+            <input type="file" name="image" accept="image/jpeg,image/png,image/webp" style="padding:.4rem">
+            <?php if ($isEdit && !empty($product['image'])): ?>
+            <img src="<?= UPLOAD_URL.e($product['image']) ?>" style="width:80px;border-radius:7px;margin-top:.5rem;border:1px solid var(--border)" alt="">
+            <?php endif; ?>
+          </div>
         </div>
 
         <div class="flex gap-1 mt-2">
@@ -99,42 +139,102 @@ ob_start();
   </div>
 
   <?php if ($isEdit): ?>
-  <!-- Stock Adjustment -->
-  <div class="card">
-    <div class="card-header"><h3><i class="fa-solid fa-box" aria-hidden="true"></i> Stock Adjustment</h3></div>
-    <div class="card-body">
-      <div style="margin-bottom:1rem;text-align:center">
-        <div class="text-muted text-sm">Current Stock</div>
-        <div style="font-size:2.5rem;font-weight:700;font-family:var(--font);color:<?= $product['quantity']<=$product['low_stock_threshold']?'var(--danger)':'var(--accent2)' ?>"><?= $product['quantity'] ?></div>
-        <div class="text-muted text-sm">units (threshold: <?= $product['low_stock_threshold'] ?>)</div>
+  <div style="display:flex;flex-direction:column;gap:1rem">
+    <div class="card">
+      <div class="card-header"><h3><i class="fa-solid fa-box" aria-hidden="true"></i> Stock Adjustment</h3></div>
+      <div class="card-body">
+        <div style="margin-bottom:1rem;text-align:center">
+          <div class="text-muted text-sm">Current Stock (Sz <?= e($product['size']) ?>)</div>
+          <div style="font-size:2.5rem;font-weight:700;font-family:var(--font);color:<?= $product['quantity']<=$product['low_stock_threshold']?'var(--danger)':'var(--accent2)' ?>"><?= $product['quantity'] ?></div>
+          <div class="text-muted text-sm">units (threshold: <?= $product['low_stock_threshold'] ?>)</div>
+        </div>
+        <form method="POST" action="<?= BASE_PATH ?>/products/<?= $product['id'] ?>/stock">
+          <input type="hidden" name="csrf" value="<?= csrf() ?>">
+          <div class="form-group">
+            <label>Adjustment Type</label>
+            <select name="type">
+              <option value="addition">+ Addition (restock)</option>
+              <option value="return">+ Return from customer</option>
+              <option value="correction">Correction</option>
+              <option value="damaged">− Damaged / lost</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Quantity</label>
+            <input type="number" name="quantity" required min="1" placeholder="Units to add/remove">
+          </div>
+          <div class="form-group">
+            <label>Note</label>
+            <input type="text" name="note" placeholder="Reason for adjustment">
+          </div>
+          <button type="submit" class="btn btn-success w-full"><i class="fa-solid fa-check" aria-hidden="true"></i> Apply Adjustment</button>
+        </form>
       </div>
-      <form method="POST" action="<?= BASE_PATH ?>/products/<?= $product['id'] ?>/stock">
-        <input type="hidden" name="csrf" value="<?= csrf() ?>">
-        <div class="form-group">
-          <label>Adjustment Type</label>
-          <select name="type">
-            <option value="addition">+ Addition (restock)</option>
-            <option value="return">+ Return from customer</option>
-            <option value="correction">Correction</option>
-            <option value="damaged">− Damaged / lost</option>
-          </select>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3><i class="fa-solid fa-ruler-combined" aria-hidden="true"></i> All sizes</h3></div>
+      <div class="card-body" style="padding-top:.35rem">
+        <p class="text-muted text-sm">Each size keeps its own price and stock. Editing name/category/design updates the whole style.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Size</th><th>Sell</th><th>Stock</th><th></th></tr></thead>
+            <tbody>
+              <?php foreach ($variants as $v): ?>
+              <tr style="<?= (int)$v['id']===(int)$product['id']?'background:rgba(200,83,42,.06)':'' ?>">
+                <td><strong>Sz <?= e($v['size']) ?></strong></td>
+                <td class="text-sm"><?= money($v['selling_price']) ?></td>
+                <td><span class="badge <?= $v['quantity']<=$v['low_stock_threshold']?'badge-low':'badge-ok' ?>"><?= (int)$v['quantity'] ?></span></td>
+                <td>
+                  <?php if ((int)$v['id']!==(int)$product['id']): ?>
+                  <a href="<?= BASE_PATH ?>/products/<?= (int)$v['id'] ?>/edit" class="btn btn-ghost btn-xs">Edit</a>
+                  <?php else: ?>
+                  <span class="text-muted text-sm">Editing</span>
+                  <?php endif; ?>
+                </td>
+              </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
         </div>
-        <div class="form-group">
-          <label>Quantity</label>
-          <input type="number" name="quantity" required min="1" placeholder="Units to add/remove">
-        </div>
-        <div class="form-group">
-          <label>Note</label>
-          <input type="text" name="note" placeholder="Reason for adjustment">
-        </div>
-        <button type="submit" class="btn btn-success w-full"><i class="fa-solid fa-check" aria-hidden="true"></i> Apply Adjustment</button>
-      </form>
+
+        <form method="POST" action="<?= BASE_PATH ?>/products/<?= (int)$product['id'] ?>/sizes" style="margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem">
+          <input type="hidden" name="csrf" value="<?= csrf() ?>">
+          <h4 style="font-size:.9rem;margin-bottom:.65rem"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add another size</h4>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Size *</label>
+              <input type="text" name="size" required placeholder="e.g. 35">
+            </div>
+            <div class="form-group">
+              <label>Sell (GHS) *</label>
+              <input type="number" name="selling_price" required step="0.01" min="0" value="<?= e($product['selling_price']) ?>">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Cost (GHS)</label>
+              <input type="number" name="cost_price" step="0.01" min="0" value="<?= e($product['cost_price']) ?>">
+            </div>
+            <div class="form-group">
+              <label>Qty</label>
+              <input type="number" name="quantity" min="0" value="0">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Barcode</label>
+            <input type="text" name="barcode" class="mono" placeholder="Optional">
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm w-full"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add size</button>
+        </form>
+      </div>
     </div>
   </div>
   <?php endif; ?>
 </div>
 
 <script>
+<?php if ($isEdit): ?>
 function calcMargin() {
   const cost    = parseFloat(document.querySelector('[name=cost_price]').value)||0;
   const selling = parseFloat(document.querySelector('[name=selling_price]').value)||0;
@@ -150,5 +250,61 @@ function calcMargin() {
 }
 document.querySelector('[name=cost_price]').addEventListener('input', calcMargin);
 calcMargin();
+<?php else: ?>
+let sizeRowIndex = 0;
+function addSizeRow(prefill = {}) {
+  const i = sizeRowIndex++;
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text" name="sizes[${i}][size]" required placeholder="30" value="${prefill.size ?? ''}" style="width:4.2rem"></td>
+    <td><input type="number" name="sizes[${i}][cost_price]" step="0.01" min="0" value="${prefill.cost ?? ''}" placeholder="0.00" style="width:6rem"></td>
+    <td><input type="number" name="sizes[${i}][selling_price]" step="0.01" min="0" required value="${prefill.sell ?? ''}" placeholder="0.00" style="width:6rem"></td>
+    <td><input type="number" name="sizes[${i}][quantity]" min="0" value="${prefill.qty ?? 0}" style="width:4.5rem"></td>
+    <td><input type="text" name="sizes[${i}][barcode]" class="mono" value="${prefill.barcode ?? ''}" placeholder="—" style="min-width:7rem"></td>
+    <td><button type="button" class="btn btn-ghost btn-xs" onclick="this.closest('tr').remove()" title="Remove"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></td>`;
+  document.getElementById('sizeRows').appendChild(tr);
+}
+function fillSizeRange(from, to) {
+  const body = document.getElementById('sizeRows');
+  if (body.children.length && !confirm('Replace current size rows with '+from+'–'+to+'?')) return;
+  body.innerHTML = '';
+  sizeRowIndex = 0;
+  const defC = document.getElementById('defaultCost').value;
+  const defS = document.getElementById('defaultSell').value;
+  for (let s = from; s <= to; s++) addSizeRow({ size: String(s), cost: defC, sell: defS, qty: 0 });
+}
+function applyDefaultPrices() {
+  const defC = document.getElementById('defaultCost').value;
+  const defS = document.getElementById('defaultSell').value;
+  document.querySelectorAll('#sizeRows tr').forEach(tr => {
+    const cost = tr.querySelector('[name*="[cost_price]"]');
+    const sell = tr.querySelector('[name*="[selling_price]"]');
+    if (defC !== '' && cost && !cost.value) cost.value = defC;
+    if (defS !== '' && sell && !sell.value) sell.value = defS;
+  });
+  // Also copy first filled sell/cost across empties if defaults blank
+  const costs = [...document.querySelectorAll('#sizeRows [name*="[cost_price]"]')];
+  const sells = [...document.querySelectorAll('#sizeRows [name*="[selling_price]"]')];
+  const firstCost = costs.find(i => i.value !== '')?.value;
+  const firstSell = sells.find(i => i.value !== '')?.value;
+  costs.forEach(i => { if (!i.value && firstCost) i.value = firstCost; });
+  sells.forEach(i => { if (!i.value && firstSell) i.value = firstSell; });
+}
+document.getElementById('productForm').addEventListener('submit', e => {
+  const rows = [...document.querySelectorAll('#sizeRows tr')];
+  const ok = rows.some(tr => {
+    const size = tr.querySelector('[name*="[size]"]')?.value.trim();
+    const sell = parseFloat(tr.querySelector('[name*="[selling_price]"]')?.value || '');
+    return size && !Number.isNaN(sell) && sell >= 0;
+  });
+  if (!ok) {
+    e.preventDefault();
+    alert('Add at least one size with a selling price.');
+  }
+});
+addSizeRow();
+addSizeRow();
+addSizeRow();
+<?php endif; ?>
 </script>
 <?php $content=ob_get_clean(); require __DIR__.'/../layouts/main.php'; ?>

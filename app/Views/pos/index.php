@@ -174,6 +174,20 @@
   </div>
 </div>
 
+<!-- Size picker -->
+<div class="modal-overlay hidden" id="sizeModal" role="presentation">
+  <div class="modal-box size-modal" role="dialog" aria-modal="true" aria-labelledby="sizeModalTitle">
+    <div class="size-modal-head">
+      <div>
+        <h3 class="modal-title-pay" id="sizeModalTitle">Select size</h3>
+        <p class="size-modal-sub" id="sizeModalSub"></p>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="closeSizeModal()" aria-label="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    </div>
+    <div class="size-modal-grid" id="sizeModalGrid"></div>
+  </div>
+</div>
+
 <!-- In-frame receipt -->
 <div class="pos-receipt-frame hidden" id="receiptFrame" aria-hidden="true">
   <div class="pos-receipt-panel">
@@ -265,7 +279,7 @@ function renderPagination(total, totalPages, page) {
       <button type="button" class="btn btn-sm btn-ghost" ${page <= 1 ? 'disabled' : ''} onclick="goPosPage(${page - 1})">
         <i class="fa-solid fa-chevron-left" aria-hidden="true"></i> Prev
       </button>
-      <span class="pos-page-info">Page ${page} / ${totalPages} · ${total}</span>
+      <span class="pos-page-info">Page ${page} / ${totalPages} · ${total} styles</span>
       <button type="button" class="btn btn-sm btn-ghost" ${page >= totalPages ? 'disabled' : ''} onclick="goPosPage(${page + 1})">
         Next <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
       </button>
@@ -295,7 +309,7 @@ function renderProductGrid(products) {
     return;
   }
 
-  grid.innerHTML = products.map(p => {
+  grid.innerHTML = products.map((p, idx) => {
     const imgSrc = productImageUrl(p);
     const imgBlock = imgSrc
       ? `<img class="pt-img" src="${escAttr(imgSrc)}" alt="${escAttr(p.name)}" loading="lazy" decoding="async" onerror="this.onerror=null;this.outerHTML='<div class=&quot;pt-img pt-img--placeholder&quot; aria-hidden=&quot;true&quot;><i class=&quot;fa-solid fa-shoe-prints&quot; aria-hidden=&quot;true&quot;></i></div>'">`
@@ -304,22 +318,73 @@ function renderProductGrid(products) {
       ? `<span class="pt-stock-row">${ICON_WARN} Out of stock</span>`
       : `<span class="pt-stock-ok">${escHtml(String(p.quantity))} in stock</span>`;
     const design = escHtml(p.design ?? '');
+    const pmin = parseFloat(p.price_min ?? p.selling_price ?? 0);
+    const pmax = parseFloat(p.price_max ?? p.selling_price ?? 0);
+    const priceLabel = (pmin === pmax)
+      ? `GHS ${pmin.toFixed(2)}`
+      : `GHS ${pmin.toFixed(2)} – ${pmax.toFixed(2)}`;
+    const sizeCount = Number(p.size_count || (p.variants ? p.variants.length : 1) || 1);
+    const sizeLabel = sizeCount > 1 ? `${sizeCount} sizes` : `Sz ${escHtml((p.variants && p.variants[0] && p.variants[0].size) || p.size || '—')}`;
     return `
-    <div class="product-tile ${p.quantity<=0?'out-of-stock':''}" onclick="addToCart(${p.id},'${escHtml(p.name)}','${design}','${escHtml(p.size)}',${p.selling_price},${p.cost_price},${p.quantity},'${escHtml(p.category_name)}','${escHtml(p.gender)}')">
+    <div class="product-tile ${p.quantity<=0?'out-of-stock':''}" data-family-idx="${idx}" onclick="openFamilyPicker(${idx})">
       <div class="pt-img-wrap">${imgBlock}</div>
       <div class="pt-body">
         <div class="pt-cat">${escHtml(p.category_name)}</div>
         <div class="pt-name">${escHtml(p.name)}</div>
         <div class="pt-design">${design ? design + ' · ' : ''}${escHtml(p.gender)}</div>
         <div class="pt-meta">
-          <span class="pt-size">Sz ${escHtml(p.size)}</span>
-          <span class="pt-price">GHS ${parseFloat(p.selling_price).toFixed(2)}</span>
+          <span class="pt-size">${sizeLabel}</span>
+          <span class="pt-price">${priceLabel}</span>
         </div>
         <div class="pt-stock">${stockLine}</div>
       </div>
     </div>`;
   }).join('');
+
+  window.__posFamilies = products;
 }
+
+function openFamilyPicker(idx) {
+  const family = (window.__posFamilies || [])[idx];
+  if (!family) return;
+  const variants = Array.isArray(family.variants) ? family.variants : [];
+  if (variants.length === 1) {
+    const v = variants[0];
+    addToCart(v.id, v.name, v.design ?? '', v.size, v.selling_price, v.cost_price, v.quantity, v.category_name, v.gender);
+    return;
+  }
+  window.__sizePickerVariants = variants;
+  document.getElementById('sizeModalTitle').textContent = family.name;
+  const design = family.design ? family.design + ' · ' : '';
+  document.getElementById('sizeModalSub').textContent = design + (family.gender || '') + ' · pick a size';
+  const grid = document.getElementById('sizeModalGrid');
+  grid.innerHTML = variants.map((v, i) => {
+    const oos = v.quantity <= 0;
+    return `
+      <button type="button" class="size-pick ${oos ? 'is-oos' : ''}" ${oos ? 'disabled' : ''}
+        onclick="pickVariantAt(${i})">
+        <span class="size-pick-sz">Sz ${escHtml(String(v.size))}</span>
+        <span class="size-pick-price">GHS ${parseFloat(v.selling_price).toFixed(2)}</span>
+        <span class="size-pick-stock">${oos ? 'Out of stock' : (v.quantity + ' left')}</span>
+      </button>`;
+  }).join('');
+  document.getElementById('sizeModal').classList.remove('hidden');
+}
+
+function pickVariantAt(i) {
+  const v = (window.__sizePickerVariants || [])[i];
+  if (!v) return;
+  addToCart(v.id, v.name, v.design ?? '', v.size, v.selling_price, v.cost_price, v.quantity, v.category_name, v.gender);
+  closeSizeModal();
+}
+
+function closeSizeModal() {
+  document.getElementById('sizeModal').classList.add('hidden');
+}
+
+document.getElementById('sizeModal').addEventListener('click', e => {
+  if (e.target.id === 'sizeModal') closeSizeModal();
+});
 
 function filterCat(btn, catId) {
   document.querySelectorAll('.cat-filter').forEach(b => b.classList.remove('active'));

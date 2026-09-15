@@ -39,7 +39,7 @@ class ProductController {
 
     public function create(): void {
         $categories = $this->cm->all();
-        view('owner/product_form', ['categories'=>$categories,'product'=>null,'error'=>flash('error')]);
+        view('owner/product_form', ['categories'=>$categories,'product'=>null,'variants'=>[],'error'=>flash('error')]);
     }
 
     public function store(): void {
@@ -49,11 +49,28 @@ class ProductController {
             $image = $this->handleUpload();
             if (!$image) { flash('error','Invalid image file.'); redirect('/products/create'); }
         }
-        $d = $_POST;
-        $d['image'] = $image;
-        $d['barcode'] = $d['barcode'] ?: null;
-        $this->pm->create($d);
-        flash('success','Product created.');
+
+        $sizes = $this->parseSizeRows($_POST['sizes'] ?? []);
+        if (!$sizes) {
+            flash('error', 'Add at least one size with a selling price.');
+            redirect('/products/create');
+        }
+
+        try {
+            $this->pm->createWithSizes([
+                'category_id'         => (int)$_POST['category_id'],
+                'name'                => trim($_POST['name'] ?? ''),
+                'gender'              => $_POST['gender'] ?? 'Unisex',
+                'design'              => trim($_POST['design'] ?? '') ?: null,
+                'low_stock_threshold' => (int)($_POST['low_stock_threshold'] ?? LOW_STOCK_THRESHOLD),
+                'image'               => $image,
+            ], $sizes);
+        } catch (Throwable $e) {
+            flash('error', $e->getMessage() ?: 'Could not create product.');
+            redirect('/products/create');
+        }
+
+        flash('success', count($sizes).' size'.(count($sizes)===1?'':'s').' added.');
         redirect('/products');
     }
 
@@ -61,7 +78,8 @@ class ProductController {
         $product = $this->pm->findById((int)$id);
         if (!$product) redirect('/products');
         $categories = $this->cm->all();
-        view('owner/product_form', compact('product','categories') + ['error'=>flash('error')]);
+        $variants = $this->pm->siblings((int)$id, true);
+        view('owner/product_form', compact('product','categories','variants') + ['error'=>flash('error')]);
     }
 
     public function update(string $id): void {
@@ -70,10 +88,70 @@ class ProductController {
         if (!empty($_FILES['image']['name'])) {
             $image = $this->handleUpload();
         }
-        $d = $_POST; $d['image'] = $image;
+        $d = [
+            'category_id'         => (int)$_POST['category_id'],
+            'name'                => trim($_POST['name'] ?? ''),
+            'gender'              => $_POST['gender'] ?? 'Unisex',
+            'design'              => trim($_POST['design'] ?? '') ?: null,
+            'size'                => trim($_POST['size'] ?? ''),
+            'barcode'             => trim($_POST['barcode'] ?? '') ?: null,
+            'cost_price'          => (float)($_POST['cost_price'] ?? 0),
+            'selling_price'       => (float)($_POST['selling_price'] ?? 0),
+            'low_stock_threshold' => (int)($_POST['low_stock_threshold'] ?? LOW_STOCK_THRESHOLD),
+            'image'               => $image,
+        ];
+        if ($d['size'] === '') {
+            flash('error', 'Size is required.');
+            redirect('/products/'.$id.'/edit');
+        }
         $this->pm->update((int)$id, $d);
         flash('success','Product updated.');
-        redirect('/products');
+        redirect('/products/'.$id.'/edit');
+    }
+
+    public function addSize(string $id): void {
+        verifyCsrf();
+        $size = trim($_POST['size'] ?? '');
+        $price = (float)($_POST['selling_price'] ?? 0);
+        if ($size === '' || $price <= 0) {
+            flash('error', 'Size and selling price are required.');
+            redirect('/products/'.$id.'/edit');
+        }
+        try {
+            $newId = $this->pm->addSizeToFamily((int)$id, [
+                'size'          => $size,
+                'barcode'       => trim($_POST['barcode'] ?? '') ?: null,
+                'cost_price'    => (float)($_POST['cost_price'] ?? 0),
+                'selling_price' => $price,
+                'quantity'      => (int)($_POST['quantity'] ?? 0),
+            ]);
+            flash('success', 'Size '.$size.' added.');
+            redirect('/products/'.$newId.'/edit');
+        } catch (Throwable $e) {
+            flash('error', $e->getMessage() ?: 'Could not add size.');
+            redirect('/products/'.$id.'/edit');
+        }
+    }
+
+    /** @return list<array{size:string,cost_price:float,selling_price:float,quantity:int,barcode:?string}> */
+    private function parseSizeRows(mixed $raw): array {
+        if (!is_array($raw)) return [];
+        $out = [];
+        foreach ($raw as $row) {
+            if (!is_array($row)) continue;
+            $size = trim((string)($row['size'] ?? ''));
+            if ($size === '') continue;
+            $sell = (float)($row['selling_price'] ?? 0);
+            if ($sell < 0) continue;
+            $out[] = [
+                'size'          => $size,
+                'cost_price'    => (float)($row['cost_price'] ?? 0),
+                'selling_price' => $sell,
+                'quantity'      => (int)($row['quantity'] ?? 0),
+                'barcode'       => trim((string)($row['barcode'] ?? '')) ?: null,
+            ];
+        }
+        return $out;
     }
 
     public function delete(string $id): void {
