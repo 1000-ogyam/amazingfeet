@@ -151,12 +151,36 @@ class PosController {
         exit;
     }
 
-    // AJAX: find by barcode
+    // AJAX: find by SKU or barcode (may return multiple sizes sharing one SKU)
     public function byBarcode(string $bc): void {
         header('Content-Type: application/json');
-        $p = $this->products->findByBarcode($bc);
-        if ($p) echo json_encode(['found' => true,  'product' => $p]);
-        else    echo json_encode(['found' => false]);
+        $products = $this->products->findAllByCode($bc);
+        if (!$products) {
+            echo json_encode(['found' => false]);
+            exit;
+        }
+        $map = static function (array $p): array {
+            return [
+                'id'            => (int)$p['id'],
+                'name'          => $p['name'],
+                'design'        => $p['design'],
+                'size'          => $p['size'],
+                'sku'           => $p['sku'] ?? null,
+                'selling_price' => (float)$p['selling_price'],
+                'cost_price'    => (float)$p['cost_price'],
+                'quantity'      => (int)$p['quantity'],
+                'category_name' => $p['category_name'],
+                'gender'        => $p['gender'],
+                'barcode'       => $p['barcode'],
+            ];
+        };
+        $variants = array_map($map, $products);
+        echo json_encode([
+            'found'    => true,
+            'count'    => count($variants),
+            'product'  => $variants[0],
+            'variants' => $variants,
+        ]);
         exit;
     }
 }

@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS products (
     gender          ENUM('Boys','Girls','Unisex','Ladies') NOT NULL,
     design          VARCHAR(100) NULL COMMENT 'Style/design name',
     size            VARCHAR(10) NOT NULL COMMENT 'Numeric or text size',
-    sku             VARCHAR(100) UNIQUE NULL COMMENT 'Internal SKU code for this size variant',
+    sku             VARCHAR(100) NULL COMMENT 'Style/SKU code (may be shared across sizes)',
     barcode         VARCHAR(100) UNIQUE NULL,
     cost_price      DECIMAL(10,2) NOT NULL DEFAULT 0,
     selling_price   DECIMAL(10,2) NOT NULL DEFAULT 0,
@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS products (
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (category_id) REFERENCES categories(id),
-    INDEX idx_products_style_key (style_key)
+    INDEX idx_products_style_key (style_key),
+    INDEX idx_products_sku (sku)
 );
 
 -- ─── Sale locations ───────────────────────────────────────────

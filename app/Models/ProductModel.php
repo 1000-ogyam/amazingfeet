@@ -35,19 +35,26 @@ class ProductModel {
     }
 
     public function findByBarcode(string $bc): ?array {
-        return $this->findByCode($bc);
+        $rows = $this->findAllByCode($bc);
+        return $rows[0] ?? null;
     }
 
-    /** Find active product by SKU or barcode. */
+    /** Find active product by SKU or barcode (first match). */
     public function findByCode(string $code): ?array {
+        $rows = $this->findAllByCode($code);
+        return $rows[0] ?? null;
+    }
+
+    /** All active products matching SKU or barcode (same SKU may span sizes). */
+    public function findAllByCode(string $code): array {
         $code = trim($code);
-        if ($code === '') return null;
+        if ($code === '') return [];
         if ($this->hasSkuColumn()) {
             $stmt = $this->db->prepare("
                 SELECT p.*, c.name AS category_name
                 FROM products p JOIN categories c ON p.category_id=c.id
                 WHERE p.is_active=1 AND (p.sku=? OR p.barcode=?)
-                LIMIT 1
+                ORDER BY p.size+0, p.size
             ");
             $stmt->execute([$code, $code]);
         } else {
@@ -55,11 +62,11 @@ class ProductModel {
                 SELECT p.*, c.name AS category_name
                 FROM products p JOIN categories c ON p.category_id=c.id
                 WHERE p.is_active=1 AND p.barcode=?
-                LIMIT 1
+                ORDER BY p.size+0, p.size
             ");
             $stmt->execute([$code]);
         }
-        return $stmt->fetch() ?: null;
+        return $stmt->fetchAll();
     }
 
     /** Paginated POS browser grouped by style_key (fallback: name/gender/design/category). */

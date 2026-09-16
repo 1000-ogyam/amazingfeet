@@ -102,7 +102,8 @@ ob_start();
           <div class="flex-center gap-1" style="margin-top:.65rem;flex-wrap:wrap">
             <button type="button" class="btn btn-ghost btn-sm" onclick="addSizeRow()"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add size row</button>
             <button type="button" class="btn btn-ghost btn-sm" onclick="fillSizeRange(28,40)"><i class="fa-solid fa-list-ol" aria-hidden="true"></i> Prefill 28–40</button>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="applyDefaultPrices()"><i class="fa-solid fa-copy" aria-hidden="true"></i> Copy first price to empty</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="applyDefaultPrices()"><i class="fa-solid fa-copy" aria-hidden="true"></i> Apply prices to empty</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="applyDefaultSku(true)"><i class="fa-solid fa-tags" aria-hidden="true"></i> Apply SKU to all sizes</button>
           </div>
           <div class="form-row" style="margin-top:.85rem">
             <div class="form-group">
@@ -112,6 +113,18 @@ ob_start();
             <div class="form-group">
               <label>Default sell price (optional helper)</label>
               <input type="number" id="defaultSell" step="0.01" min="0" placeholder="Fill into empty sell cells">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Default SKU (optional helper)</label>
+              <input type="text" id="defaultSku" class="mono" placeholder="e.g. T266370">
+              <p class="text-muted text-sm" style="margin:.35rem 0 0">Applies the <strong>same SKU</strong> to every size row — just like applying one price across sizes.</p>
+            </div>
+            <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:.15rem">
+              <label style="display:flex;align-items:center;gap:.4rem;font-weight:500;text-transform:none;letter-spacing:0;font-size:.85rem">
+                <input type="checkbox" id="skuAppendSize" style="width:auto"> Append size to SKU (e.g. T266370-30)
+              </label>
             </div>
           </div>
         </div>
@@ -287,7 +300,42 @@ function fillSizeRange(from, to) {
   sizeRowIndex = 0;
   const defC = document.getElementById('defaultCost').value;
   const defS = document.getElementById('defaultSell').value;
-  for (let s = from; s <= to; s++) addSizeRow({ size: String(s), cost: defC, sell: defS, qty: 0 });
+  const defSku = (document.getElementById('defaultSku').value || '').trim();
+  const appendSize = document.getElementById('skuAppendSize').checked;
+  for (let s = from; s <= to; s++) {
+    const size = String(s);
+    const sku = !defSku ? '' : (appendSize ? buildSku(defSku, size) : defSku);
+    addSizeRow({ size, cost: defC, sell: defS, qty: 0, sku });
+  }
+}
+function buildSku(base, size) {
+  const b = String(base || '').trim().replace(/[-\s]+$/, '');
+  const sz = String(size || '').trim();
+  if (!b) return '';
+  if (!sz) return b;
+  if (b.toLowerCase().endsWith('-' + sz.toLowerCase()) || b.toLowerCase().endsWith(sz.toLowerCase())) return b;
+  return b + '-' + sz;
+}
+function applyDefaultSku(overwriteAll) {
+  let base = (document.getElementById('defaultSku').value || '').trim();
+  const appendSize = document.getElementById('skuAppendSize').checked;
+  const skuInputs = [...document.querySelectorAll('#sizeRows [name*="[sku]"]')];
+  if (!base) {
+    const first = skuInputs.find(i => i.value.trim() !== '');
+    base = first ? first.value.trim() : '';
+  }
+  if (!base) {
+    alert('Enter a default SKU (or fill the first size SKU), then apply again.');
+    return;
+  }
+  document.getElementById('defaultSku').value = base;
+  document.querySelectorAll('#sizeRows tr').forEach(tr => {
+    const size = tr.querySelector('[name*="[size]"]')?.value.trim() || '';
+    const sku = tr.querySelector('[name*="[sku]"]');
+    if (!sku) return;
+    if (!overwriteAll && sku.value.trim()) return;
+    sku.value = appendSize ? buildSku(base, size) : base;
+  });
 }
 function applyDefaultPrices() {
   const defC = document.getElementById('defaultCost').value;
@@ -305,6 +353,8 @@ function applyDefaultPrices() {
   const firstSell = sells.find(i => i.value !== '')?.value;
   costs.forEach(i => { if (!i.value && firstCost) i.value = firstCost; });
   sells.forEach(i => { if (!i.value && firstSell) i.value = firstSell; });
+  // Same convenience for SKU empties
+  applyDefaultSku(false);
 }
 document.getElementById('productForm').addEventListener('submit', e => {
   const rows = [...document.querySelectorAll('#sizeRows tr')];

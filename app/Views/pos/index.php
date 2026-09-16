@@ -426,8 +426,29 @@ document.getElementById('barcodeInput').addEventListener('keydown', async e => {
   const r = await fetch(BASE + '/pos/product/barcode/' + encodeURIComponent(bc));
   const d = await r.json();
   if (d.found) {
-    const p = d.product;
-    addToCart(p.id, p.name, p.design ?? '', p.size, p.selling_price, p.cost_price, p.quantity, p.category_name, p.gender, p.sku ?? '');
+    const variants = Array.isArray(d.variants) && d.variants.length ? d.variants : (d.product ? [d.product] : []);
+    if (variants.length === 1) {
+      const p = variants[0];
+      addToCart(p.id, p.name, p.design ?? '', p.size, p.selling_price, p.cost_price, p.quantity, p.category_name, p.gender, p.sku ?? '');
+    } else if (variants.length > 1) {
+      // Same SKU across sizes → pick size
+      window.__sizePickerVariants = variants;
+      document.getElementById('sizeModalTitle').textContent = variants[0].name || 'Select size';
+      document.getElementById('sizeModalSub').textContent = (variants[0].sku ? ('SKU ' + variants[0].sku + ' · ') : '') + 'pick a size';
+      const grid = document.getElementById('sizeModalGrid');
+      grid.innerHTML = variants.map((v, i) => {
+        const oos = v.quantity <= 0;
+        return `
+          <button type="button" class="size-pick ${oos ? 'is-oos' : ''}" ${oos ? 'disabled' : ''}
+            onclick="pickVariantAt(${i})">
+            <span class="size-pick-sz">Sz ${escHtml(String(v.size))}</span>
+            ${v.sku ? `<span class="size-pick-sku mono">${escHtml(String(v.sku))}</span>` : ''}
+            <span class="size-pick-price">GHS ${parseFloat(v.selling_price).toFixed(2)}</span>
+            <span class="size-pick-stock">${oos ? 'Out of stock' : (v.quantity + ' left')}</span>
+          </button>`;
+      }).join('');
+      document.getElementById('sizeModal').classList.remove('hidden');
+    }
     e.target.value = '';
   } else {
     e.target.style.borderColor = 'var(--danger)';
