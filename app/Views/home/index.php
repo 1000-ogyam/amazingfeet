@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Amazing Feet — Sign In</title>
   <meta name="description" content="Amazing Feet is a modern retail POS and operations system for school shoes, ladies footwear, and shop teams across Ghana.">
   <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/home.css">

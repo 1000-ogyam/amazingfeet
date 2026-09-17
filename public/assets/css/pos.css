@@ -1,5 +1,5 @@
 /* POS — premium compact terminal */
-.pos-body{overflow:hidden;background:var(--bg);height:100dvh}
+.pos-body{overflow:hidden;background:var(--bg);height:100dvh;touch-action:manipulation;overscroll-behavior:none}
 
 .pos-topbar{
   background:#12151a;color:#fff;display:flex;align-items:center;gap:.75rem;

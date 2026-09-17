@@ -28,8 +28,12 @@ class ProductModel {
         return $stmt->fetchAll();
     }
 
-    /** Product list grouped by style (one row per main product, not per size). */
-    public function allStyles(array $f = []): array {
+    /** Product list grouped by style (one row per main product), paginated. */
+    public function allStyles(array $f = [], int $page = 1, int $perPage = 10): array {
+        $page = max(1, $page);
+        $perPage = min(100, max(5, $perPage));
+        $offset = ($page - 1) * $perPage;
+
         $w = ['p.is_active = 1']; $params = [];
         if (!empty($f['category_id'])) { $w[] = 'p.category_id = ?'; $params[] = $f['category_id']; }
         if (!empty($f['gender']))      { $w[] = 'p.gender = ?';      $params[] = $f['gender']; }
@@ -54,6 +58,25 @@ class ProductModel {
             ? ' HAVING SUM(CASE WHEN p.quantity <= p.low_stock_threshold THEN 1 ELSE 0 END) > 0'
             : '';
 
+        $countSql = "SELECT COUNT(*) AS style_total, COALESCE(SUM(size_count), 0) AS variant_total FROM (
+            SELECT COUNT(*) AS size_count
+            FROM products p
+            JOIN categories c ON p.category_id = c.id
+            WHERE $where
+            GROUP BY $groupExpr, p.category_id, p.name, p.gender, COALESCE(p.design, ''), c.name, c.sort_order
+            $having
+        ) t";
+        $countStmt = $this->db->prepare($countSql);
+        $countStmt->execute($params);
+        $countRow = $countStmt->fetch() ?: ['style_total' => 0, 'variant_total' => 0];
+        $total = (int) $countRow['style_total'];
+        $variantTotal = (int) $countRow['variant_total'];
+        $totalPages = $total > 0 ? (int) ceil($total / $perPage) : 1;
+        if ($page > $totalPages) {
+            $page = $totalPages;
+            $offset = ($page - 1) * $perPage;
+        }
+
         $sql = "SELECT
                     MIN(p.id) AS id,
                     p.category_id,
@@ -77,10 +100,20 @@ class ProductModel {
                 WHERE $where
                 GROUP BY $groupExpr, p.category_id, p.name, p.gender, COALESCE(p.design, ''), c.name, c.sort_order
                 $having
-                ORDER BY c.sort_order, p.name, p.gender, COALESCE(p.design, '')";
+                ORDER BY c.sort_order, p.name, p.gender, COALESCE(p.design, '')
+                LIMIT {$perPage} OFFSET {$offset}";
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
-        return $stmt->fetchAll();
+        $items = $stmt->fetchAll();
+
+        return [
+            'items'        => $items,
+            'total'        => $total,
+            'page'         => $page,
+            'perPage'      => $perPage,
+            'totalPages'   => $totalPages,
+            'variantTotal' => $variantTotal,
+        ];
     }
 
     public function findById(int $id): ?array {

@@ -1,7 +1,27 @@
-<?php $pageTitle='Products'; $cp='/products'; ob_start(); ?>
+<?php
+$pageTitle = 'Products';
+$cp = '/products';
+$pagination = $pagination ?? ['page'=>1,'perPage'=>10,'total'=>0,'totalPages'=>1];
+$styleCount = (int)($styleCount ?? count($products));
+$page = (int)$pagination['page'];
+$perPage = (int)$pagination['perPage'];
+$total = (int)$pagination['total'];
+$totalPages = (int)$pagination['totalPages'];
+$from = $total === 0 ? 0 : (($page - 1) * $perPage) + 1;
+$to = min($page * $perPage, $total);
+
+$qs = static function (array $extra = []) use ($filters, $perPage): string {
+    $params = array_merge($filters, ['per_page' => $perPage], $extra);
+    $params = array_filter($params, static fn($v) => $v !== '' && $v !== null);
+    return http_build_query($params);
+};
+
+ob_start();
+?>
 <div class="products-toolbar">
-  <form method="GET" class="products-filters">
-    <input type="text" name="search" value="<?= e($_GET['search']??'') ?>" placeholder="Search name, SKU, barcode…">
+  <form method="GET" class="products-filters" id="productsFilterForm">
+    <input type="hidden" name="per_page" value="<?= (int)$perPage ?>">
+    <input type="text" name="search" value="<?= e($filters['search'] ?? '') ?>" placeholder="Search name, SKU, barcode…">
     <select name="category_id">
       <option value="">All Categories</option>
       <?php foreach ($categories as $c): ?>
@@ -27,7 +47,7 @@
 
 <div class="products-stats">
   <div class="products-stat">
-    <div class="text-muted">Products</div><div class="font-bold"><?= count($products) ?></div>
+    <div class="text-muted">Products</div><div class="font-bold"><?= $styleCount ?></div>
   </div>
   <div class="products-stat">
     <div class="text-muted">Size variants</div><div class="font-bold"><?= (int)($variantCount ?? 0) ?></div>
@@ -40,19 +60,39 @@
   </div>
 </div>
 
-<div class="card">
-  <div class="card-header">
+<div class="card products-card">
+  <div class="card-header products-card-header">
     <h3><i class="fa-solid fa-box" aria-hidden="true"></i> Products</h3>
-    <span class="text-muted text-sm ml-auto hide-sm">Open a product to manage sizes</span>
+    <span class="text-muted text-sm products-range">
+      <?php if ($total > 0): ?>
+        Showing <?= $from ?>–<?= $to ?> of <?= $total ?>
+      <?php else: ?>
+        No products
+      <?php endif; ?>
+    </span>
+    <label class="products-per-page">
+      <span class="text-muted">Per page</span>
+      <select id="productsPerPage" aria-label="Rows per page">
+        <?php foreach ([10, 20, 50, 100] as $n): ?>
+        <option value="<?= $n ?>" <?= $perPage===$n?'selected':'' ?>><?= $n ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
   </div>
 
-  <!-- Desktop table -->
-  <div class="table-wrap products-table-desktop">
-    <table>
+  <div class="table-wrap products-table-wrap">
+    <table class="products-table">
       <thead>
         <tr>
-          <th>Product</th><th>SKU</th><th>Category</th><th>Gender</th><th>Design</th>
-          <th>Sizes</th><th>Price</th><th>Stock</th><th>Actions</th>
+          <th class="col-product">Product</th>
+          <th class="col-sku">SKU</th>
+          <th class="col-cat">Category</th>
+          <th class="col-gender">Gender</th>
+          <th class="col-design">Design</th>
+          <th class="col-sizes">Sizes</th>
+          <th class="col-price">Price</th>
+          <th class="col-stock">Stock</th>
+          <th class="col-actions">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -68,27 +108,26 @@
           $catSlug = str_contains(strtolower($p['category_name']),'school')?'school':(str_contains(strtolower($p['category_name']),'ladies')?'ladies':'preloved');
         ?>
         <tr>
-          <td class="products-name-cell"><?= e($p['name']) ?></td>
-          <td class="mono text-sm"><?= e($p['sku'] ?? '—') ?></td>
+          <td class="products-name-cell" title="<?= e($p['name']) ?>"><?= e($p['name']) ?></td>
+          <td class="mono text-sm col-sku"><?= e($p['sku'] ?? '—') ?></td>
           <td><span class="badge badge-<?= $catSlug ?>"><?= e($p['category_name']) ?></span></td>
           <td><span class="badge badge-<?= strtolower($p['gender']) ?>"><?= e($p['gender']) ?></span></td>
-          <td class="text-sm text-muted"><?= e($p['design']!==''?$p['design']:'—') ?></td>
-          <td>
+          <td class="text-sm text-muted col-design" title="<?= e($p['design'] ?? '') ?>"><?= e(($p['design'] ?? '') !== '' ? $p['design'] : '—') ?></td>
+          <td class="col-sizes">
             <strong><?= $sizeCount ?></strong>
-            <span class="text-muted text-sm">size<?= $sizeCount===1?'':'s' ?></span>
+            <span class="text-muted text-sm">sz</span>
           </td>
-          <td class="font-bold text-sm"><?= $priceLabel ?></td>
-          <td>
+          <td class="font-bold text-sm col-price"><?= $priceLabel ?></td>
+          <td class="col-stock">
             <span class="badge <?= $isLow?'badge-low':'badge-ok' ?>"><?= (int)$p['quantity'] ?></span>
             <?php if ($isLow): ?><span class="products-low-hint"><?= (int)$p['low_size_count'] ?> low</span><?php endif; ?>
           </td>
           <td class="products-actions">
-            <a href="<?= BASE_PATH ?>/products/<?= (int)$p['id'] ?>/edit" class="btn btn-ghost btn-xs" title="View & edit sizes"><i class="fa-solid fa-eye" aria-hidden="true"></i> View</a>
             <a href="<?= BASE_PATH ?>/products/<?= (int)$p['id'] ?>/edit" class="btn btn-ghost btn-xs"><i class="fa-solid fa-pen" aria-hidden="true"></i> Edit</a>
             <form method="POST" action="<?= BASE_PATH ?>/products/<?= (int)$p['id'] ?>/delete" class="products-del-form"
                   onsubmit="return confirm('Remove this product and all <?= $sizeCount ?> size<?= $sizeCount===1?'':'s' ?>?')">
               <input type="hidden" name="csrf" value="<?= csrf() ?>">
-              <button type="submit" class="btn btn-danger btn-xs"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
+              <button type="submit" class="btn btn-danger btn-xs" title="Delete"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
             </form>
           </td>
         </tr>
@@ -97,56 +136,62 @@
     </table>
   </div>
 
-  <!-- Mobile cards -->
-  <div class="products-cards-mobile">
-    <?php if (empty($products)): ?>
-    <div class="products-empty">No products found.</div>
-    <?php endif; ?>
-    <?php foreach ($products as $p):
-      $sizeCount = (int)($p['size_count'] ?? 1);
-      $isLow = (int)($p['low_size_count'] ?? 0) > 0;
-      $pmin = (float)($p['price_min'] ?? 0);
-      $pmax = (float)($p['price_max'] ?? 0);
-      $priceLabel = ($pmin === $pmax) ? money($pmin) : money($pmin).' – '.money($pmax);
-      $catSlug = str_contains(strtolower($p['category_name']),'school')?'school':(str_contains(strtolower($p['category_name']),'ladies')?'ladies':'preloved');
-    ?>
-    <article class="product-card-m">
-      <div class="product-card-m-top">
-        <div>
-          <h4 class="product-card-m-name"><?= e($p['name']) ?></h4>
-          <div class="product-card-m-meta">
-            <span class="badge badge-<?= $catSlug ?>"><?= e($p['category_name']) ?></span>
-            <span class="badge badge-<?= strtolower($p['gender']) ?>"><?= e($p['gender']) ?></span>
-            <?php if ($p['design'] !== ''): ?><span class="text-muted text-sm"><?= e($p['design']) ?></span><?php endif; ?>
-          </div>
-        </div>
-        <div class="product-card-m-stock">
-          <span class="badge <?= $isLow?'badge-low':'badge-ok' ?>"><?= (int)$p['quantity'] ?></span>
-          <?php if ($isLow): ?><span class="products-low-hint"><?= (int)$p['low_size_count'] ?> low</span><?php endif; ?>
-        </div>
-      </div>
-      <div class="product-card-m-row">
-        <span class="text-muted">SKU</span>
-        <span class="mono text-sm"><?= e($p['sku'] ?? '—') ?></span>
-      </div>
-      <div class="product-card-m-row">
-        <span class="text-muted">Sizes</span>
-        <span><strong><?= $sizeCount ?></strong> size<?= $sizeCount===1?'':'s' ?></span>
-      </div>
-      <div class="product-card-m-row">
-        <span class="text-muted">Price</span>
-        <span class="font-bold"><?= $priceLabel ?></span>
-      </div>
-      <div class="product-card-m-actions">
-        <a href="<?= BASE_PATH ?>/products/<?= (int)$p['id'] ?>/edit" class="btn btn-primary btn-sm"><i class="fa-solid fa-pen" aria-hidden="true"></i> View / Edit</a>
-        <form method="POST" action="<?= BASE_PATH ?>/products/<?= (int)$p['id'] ?>/delete"
-              onsubmit="return confirm('Remove this product and all <?= $sizeCount ?> size<?= $sizeCount===1?'':'s' ?>?')">
-          <input type="hidden" name="csrf" value="<?= csrf() ?>">
-          <button type="submit" class="btn btn-danger btn-sm"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
-        </form>
-      </div>
-    </article>
-    <?php endforeach; ?>
+  <?php if ($totalPages > 1 || $total > 0): ?>
+  <div class="products-pager">
+    <div class="products-pager-info text-muted text-sm">
+      Page <?= $page ?> of <?= $totalPages ?>
+    </div>
+    <div class="products-pager-btns">
+      <?php if ($page > 1): ?>
+      <a class="btn btn-ghost btn-sm" href="<?= BASE_PATH ?>/products?<?= e($qs(['page' => 1])) ?>" title="First"><i class="fa-solid fa-angles-left" aria-hidden="true"></i></a>
+      <a class="btn btn-ghost btn-sm" href="<?= BASE_PATH ?>/products?<?= e($qs(['page' => $page - 1])) ?>"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i> Prev</a>
+      <?php else: ?>
+      <button type="button" class="btn btn-ghost btn-sm" disabled><i class="fa-solid fa-angles-left" aria-hidden="true"></i></button>
+      <button type="button" class="btn btn-ghost btn-sm" disabled><i class="fa-solid fa-chevron-left" aria-hidden="true"></i> Prev</button>
+      <?php endif; ?>
+
+      <?php
+        $window = 2;
+        $start = max(1, $page - $window);
+        $end = min($totalPages, $page + $window);
+        if ($start > 1) {
+          echo '<span class="products-pager-ellipsis">…</span>';
+        }
+        for ($i = $start; $i <= $end; $i++):
+          if ($i === $page):
+      ?>
+      <span class="btn btn-primary btn-sm products-page-current"><?= $i ?></span>
+      <?php else: ?>
+      <a class="btn btn-ghost btn-sm" href="<?= BASE_PATH ?>/products?<?= e($qs(['page' => $i])) ?>"><?= $i ?></a>
+      <?php
+          endif;
+        endfor;
+        if ($end < $totalPages) {
+          echo '<span class="products-pager-ellipsis">…</span>';
+        }
+      ?>
+
+      <?php if ($page < $totalPages): ?>
+      <a class="btn btn-ghost btn-sm" href="<?= BASE_PATH ?>/products?<?= e($qs(['page' => $page + 1])) ?>">Next <i class="fa-solid fa-chevron-right" aria-hidden="true"></i></a>
+      <a class="btn btn-ghost btn-sm" href="<?= BASE_PATH ?>/products?<?= e($qs(['page' => $totalPages])) ?>" title="Last"><i class="fa-solid fa-angles-right" aria-hidden="true"></i></a>
+      <?php else: ?>
+      <button type="button" class="btn btn-ghost btn-sm" disabled>Next <i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+      <button type="button" class="btn btn-ghost btn-sm" disabled><i class="fa-solid fa-angles-right" aria-hidden="true"></i></button>
+      <?php endif; ?>
+    </div>
   </div>
+  <?php endif; ?>
 </div>
+<script>
+(function () {
+  const sel = document.getElementById('productsPerPage');
+  if (!sel) return;
+  sel.addEventListener('change', function () {
+    const u = new URL(window.location.href);
+    u.searchParams.set('per_page', this.value);
+    u.searchParams.set('page', '1');
+    window.location.href = u.pathname + '?' + u.searchParams.toString();
+  });
+})();
+</script>
 <?php $content=ob_get_clean(); require __DIR__.'/../layouts/main.php'; ?>

@@ -30,12 +30,25 @@ class ProductController {
     public function __construct() { $this->pm = new ProductModel(); $this->cm = new CategoryModel(); }
 
     public function index(): void {
-        $filters   = array_filter($_GET, fn($v) => $v !== '');
-        $products  = $this->pm->allStyles($filters);
+        $filters = array_filter($_GET, fn($v) => $v !== '' && $v !== null);
+        unset($filters['page'], $filters['per_page'], $filters['csrf']);
+        $page    = max(1, (int)($_GET['page'] ?? 1));
+        $perPage = min(100, max(5, (int)($_GET['per_page'] ?? 10)));
+        $bundle  = $this->pm->allStyles($filters, $page, $perPage);
+        $products = $bundle['items'];
+        $pagination = [
+            'page'       => $bundle['page'],
+            'perPage'    => $bundle['perPage'],
+            'total'      => $bundle['total'],
+            'totalPages' => $bundle['totalPages'],
+        ];
         $categories = $this->cm->all();
         $stockValue = $this->pm->getStockValue();
-        $variantCount = array_sum(array_map(fn($p) => (int)($p['size_count'] ?? 1), $products));
-        view('owner/products', compact('products','categories','filters','stockValue','variantCount'));
+        $styleCount = $bundle['total'];
+        $variantCount = $bundle['variantTotal'];
+        view('owner/products', compact(
+            'products','categories','filters','stockValue','variantCount','styleCount','pagination'
+        ));
     }
 
     public function create(): void {
