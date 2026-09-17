@@ -34,7 +34,15 @@ class ProductController {
         unset($filters['page'], $filters['per_page'], $filters['csrf']);
         $page    = max(1, (int)($_GET['page'] ?? 1));
         $perPage = min(100, max(5, (int)($_GET['per_page'] ?? 10)));
-        $bundle  = $this->pm->allStyles($filters, $page, $perPage);
+        try {
+            $bundle = $this->pm->allStyles($filters, $page, $perPage);
+        } catch (Throwable $e) {
+            flash('error', 'Could not load products. Please refresh or contact support.');
+            $bundle = [
+                'items' => [], 'total' => 0, 'page' => 1, 'perPage' => $perPage,
+                'totalPages' => 1, 'variantTotal' => 0,
+            ];
+        }
         $products = $bundle['items'];
         $pagination = [
             'page'       => $bundle['page'],

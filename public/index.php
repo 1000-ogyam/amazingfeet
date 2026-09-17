@@ -51,6 +51,14 @@ function e(mixed $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, '
 function money(mixed $n): string { return 'GHS '.number_format((float)$n, 2); }
 function formatMoney(mixed $n): string { return number_format((float)$n, 2); }
 
+/** Versioned public asset URL (busts Hostinger/browser CSS cache after deploy). */
+function asset(string $path): string {
+    $path = '/' . ltrim($path, '/');
+    $file = ROOT . '/public' . $path;
+    $v = is_file($file) ? (string) filemtime($file) : (string) time();
+    return BASE_PATH . $path . '?v=' . $v;
+}
+
 // ─── Request ─────────────────────────────────────────────────
 $uri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
 $base = BASE_PATH;

@@ -1,7 +1,7 @@
 <?php
 $pageTitle = 'User Guide';
 $cp = '/help';
-$extraHead = '<link rel="stylesheet" href="'.BASE_PATH.'/assets/css/guide.css">';
+$extraHead = '<link rel="stylesheet" href="'.asset('assets/css/guide.css').'">';
 ob_start();
 $role = $isOwner ? 'owner' : 'staff';
 ?>

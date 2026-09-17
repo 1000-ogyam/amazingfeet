@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title><?= e($pageTitle ?? 'Amazing Feet') ?> · <?= APP_NAME ?></title>
-  <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/app.css">
-  <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/app-compact.css">
+  <link rel="stylesheet" href="<?= asset('assets/css/app.css') ?>">
+  <link rel="stylesheet" href="<?= asset('assets/css/app-compact.css') ?>">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
   <link rel="icon" href="<?= e(af_favicon_data_uri()) ?>">
   <?= $extraHead ?? '' ?>
