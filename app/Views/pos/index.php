@@ -64,10 +64,13 @@
     <div id="posPagination" class="pos-pagination" aria-label="Product pages"></div>
   </div>
 
-  <div class="pos-right">
+  <div class="pos-right" id="posCartPanel">
     <div class="cart-header">
       <i class="fa-solid fa-cart-shopping" aria-hidden="true"></i> Cart
       <span id="cartCount" class="cart-count-lbl">(0 items)</span>
+      <button type="button" class="btn btn-ghost btn-sm pos-cart-close" id="posCartClose" onclick="closeCartSheet()" aria-label="Close cart">
+        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+      </button>
     </div>
     <div id="cartItems" class="cart-items">
       <div class="cart-empty">
@@ -91,6 +94,13 @@
     </div>
   </div>
 </div>
+
+<button type="button" class="pos-cart-fab" id="posCartFab" onclick="toggleCartSheet()" aria-label="Open cart">
+  <i class="fa-solid fa-cart-shopping" aria-hidden="true"></i>
+  <span class="pos-cart-fab-count" id="fabCartCount">0</span>
+  <span class="pos-cart-fab-total" id="fabCartTotal">GHS 0.00</span>
+</button>
+<div class="pos-cart-backdrop" id="posCartBackdrop" onclick="closeCartSheet()" hidden></div>
 
 <!-- Payment Modal -->
 <div class="modal-overlay hidden" id="payModal" role="presentation">
@@ -465,6 +475,13 @@ function addToCart(id, name, design, size, price, cost, stock, category, gender,
     cart.push({ product_id: id, name, design, size, sku: sku || '', price: parseFloat(price), cost: parseFloat(cost), stock: parseInt(stock), category, gender, qty: 1 });
   }
   renderCart();
+  if (isMobilePos()) {
+    const fab = document.getElementById('posCartFab');
+    if (fab) {
+      fab.classList.add('pulse');
+      setTimeout(() => fab.classList.remove('pulse'), 400);
+    }
+  }
 }
 function updateQty(id, delta) {
   const item = cart.find(i => i.product_id == id);
@@ -482,8 +499,12 @@ function renderCart() {
   const container = document.getElementById('cartItems');
   const count = cart.reduce((a, i) => a + i.qty, 0);
   document.getElementById('cartCount').textContent = `(${count} item${count !== 1 ? 's' : ''})`;
+  const fabCount = document.getElementById('fabCartCount');
+  if (fabCount) fabCount.textContent = String(count);
+  const fab = document.getElementById('posCartFab');
+  if (fab) fab.classList.toggle('has-items', count > 0);
   if (!cart.length) {
-    container.innerHTML = `<div class="cart-empty"><span class="cart-empty-ic">${ICON_CART_EMPTY}</span><span>Cart is empty</span><span class="cart-empty-hint">Add products from the left</span></div>`;
+    container.innerHTML = `<div class="cart-empty"><span class="cart-empty-ic">${ICON_CART_EMPTY}</span><span>Cart is empty</span><span class="cart-empty-hint">Tap products to add them</span></div>`;
     document.getElementById('checkoutBtn').disabled = true;
     updateTotals();
     return;
@@ -512,9 +533,32 @@ function updateTotals() {
   const tot = Math.max(0, sub - disc);
   document.getElementById('totSubtotal').textContent = 'GHS ' + sub.toFixed(2);
   document.getElementById('totTotal').textContent = 'GHS ' + tot.toFixed(2);
+  const fabTotal = document.getElementById('fabCartTotal');
+  if (fabTotal) fabTotal.textContent = 'GHS ' + tot.toFixed(2);
+}
+
+function isMobilePos() {
+  return window.matchMedia('(max-width: 900px)').matches;
+}
+function openCartSheet() {
+  document.getElementById('posCartPanel').classList.add('is-open');
+  const bd = document.getElementById('posCartBackdrop');
+  if (bd) bd.hidden = false;
+  document.body.classList.add('pos-cart-open');
+}
+function closeCartSheet() {
+  document.getElementById('posCartPanel').classList.remove('is-open');
+  const bd = document.getElementById('posCartBackdrop');
+  if (bd) bd.hidden = true;
+  document.body.classList.remove('pos-cart-open');
+}
+function toggleCartSheet() {
+  if (document.getElementById('posCartPanel').classList.contains('is-open')) closeCartSheet();
+  else openCartSheet();
 }
 
 function openCheckout() {
+  if (isMobilePos()) closeCartSheet();
   const sub = cart.reduce((a, i) => a + (i.price * i.qty), 0);
   const disc = parseFloat(document.getElementById('discountInput').value) || 0;
   const tot = Math.max(0, sub - disc);

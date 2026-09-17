@@ -7,7 +7,7 @@ $variants = $variants ?? [];
 ob_start();
 ?>
 <?php if ($error): ?><div class="alert alert-error"><?= e($error) ?></div><?php endif; ?>
-<div style="display:grid;grid-template-columns:1fr 340px;gap:1.25rem;align-items:start">
+<div class="product-form-layout<?= $isEdit ? ' product-form-layout--edit' : '' ?>">
   <div class="card">
     <div class="card-header"><h3><?= $isEdit ? '<i class="fa-solid fa-pen" aria-hidden="true"></i> Edit' : '<i class="fa-solid fa-plus" aria-hidden="true"></i> Add' ?> Product</h3></div>
     <div class="card-body">
@@ -142,16 +142,38 @@ ob_start();
             <input type="number" name="low_stock_threshold" min="1" value="<?= e(LOW_STOCK_THRESHOLD) ?>">
           </div>
           <?php endif; ?>
-          <div class="form-group">
-            <label>Product Image (optional)</label>
-            <input type="file" name="image" accept="image/jpeg,image/png,image/webp" style="padding:.4rem">
-            <?php if ($isEdit && !empty($product['image'])): ?>
-            <img src="<?= UPLOAD_URL.e($product['image']) ?>" style="width:80px;border-radius:7px;margin-top:.5rem;border:1px solid var(--border)" alt="">
-            <?php endif; ?>
+        </div>
+
+        <div class="form-group img-upload">
+          <label>Product Image</label>
+          <p class="text-muted text-sm img-upload-hint">Shows on the POS terminal. Take a photo or choose from your gallery (JPG, PNG, WebP).</p>
+          <div class="img-upload-box">
+            <div class="img-upload-preview" id="imgPreview">
+              <?php if ($isEdit && !empty($product['image'])): ?>
+              <img src="<?= UPLOAD_URL.e($product['image']) ?>" alt="Product" id="imgPreviewImg">
+              <?php else: ?>
+              <div class="img-upload-placeholder" id="imgPlaceholder">
+                <i class="fa-solid fa-camera" aria-hidden="true"></i>
+                <span>No image yet</span>
+              </div>
+              <?php endif; ?>
+            </div>
+            <div class="img-upload-actions">
+              <label class="btn btn-ghost btn-sm img-upload-btn">
+                <i class="fa-solid fa-images" aria-hidden="true"></i> Gallery
+                <input type="file" name="image" id="imageInput" accept="image/jpeg,image/png,image/webp,image/*" class="img-upload-input">
+              </label>
+              <label class="btn btn-ghost btn-sm img-upload-btn">
+                <i class="fa-solid fa-camera" aria-hidden="true"></i> Camera
+                <input type="file" id="imageCamera" accept="image/*" capture="environment" class="img-upload-input">
+              </label>
+              <button type="button" class="btn btn-ghost btn-sm" id="imgClearBtn" hidden><i class="fa-solid fa-xmark" aria-hidden="true"></i> Clear</button>
+            </div>
+            <p class="text-muted text-sm" id="imgStatus" hidden></p>
           </div>
         </div>
 
-        <div class="flex gap-1 mt-2">
+        <div class="flex gap-1 mt-2 product-form-actions">
           <button type="submit" class="btn btn-primary"><?= $isEdit ? '<i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Save Changes' : '<i class="fa-solid fa-plus" aria-hidden="true"></i> Add Product' ?></button>
           <a href="<?= BASE_PATH ?>/products" class="btn btn-ghost"><i class="fa-solid fa-xmark" aria-hidden="true"></i> Cancel</a>
         </div>
@@ -160,13 +182,13 @@ ob_start();
   </div>
 
   <?php if ($isEdit): ?>
-  <div style="display:flex;flex-direction:column;gap:1rem">
+  <div class="product-form-side">
     <div class="card">
       <div class="card-header"><h3><i class="fa-solid fa-box" aria-hidden="true"></i> Stock Adjustment</h3></div>
       <div class="card-body">
-        <div style="margin-bottom:1rem;text-align:center">
+        <div class="stock-adj-current">
           <div class="text-muted text-sm">Current Stock (Sz <?= e($product['size']) ?>)</div>
-          <div style="font-size:2.5rem;font-weight:700;font-family:var(--font);color:<?= $product['quantity']<=$product['low_stock_threshold']?'var(--danger)':'var(--accent2)' ?>"><?= $product['quantity'] ?></div>
+          <div class="stock-adj-qty" style="color:<?= $product['quantity']<=$product['low_stock_threshold']?'var(--danger)':'var(--accent2)' ?>"><?= $product['quantity'] ?></div>
           <div class="text-muted text-sm">units (threshold: <?= $product['low_stock_threshold'] ?>)</div>
         </div>
         <form method="POST" action="<?= BASE_PATH ?>/products/<?= $product['id'] ?>/stock">
@@ -220,9 +242,9 @@ ob_start();
           </table>
         </div>
 
-        <form method="POST" action="<?= BASE_PATH ?>/products/<?= (int)$product['id'] ?>/sizes" style="margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem">
+        <form method="POST" action="<?= BASE_PATH ?>/products/<?= (int)$product['id'] ?>/sizes" class="add-size-form">
           <input type="hidden" name="csrf" value="<?= csrf() ?>">
-          <h4 style="font-size:.9rem;margin-bottom:.65rem"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add another size</h4>
+          <h4 class="add-size-title"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add another size</h4>
           <div class="form-row">
             <div class="form-group">
               <label>Size *</label>
@@ -372,5 +394,119 @@ addSizeRow();
 addSizeRow();
 addSizeRow();
 <?php endif; ?>
+
+(function initProductImageUpload() {
+  const main = document.getElementById('imageInput');
+  const camera = document.getElementById('imageCamera');
+  const clearBtn = document.getElementById('imgClearBtn');
+  const status = document.getElementById('imgStatus');
+  const preview = document.getElementById('imgPreview');
+  if (!main || !preview) return;
+
+  const MAX_EDGE = 1400;
+  const JPEG_Q = 0.82;
+
+  function setStatus(msg, show) {
+    if (!status) return;
+    status.hidden = !show;
+    status.textContent = msg || '';
+  }
+
+  function showPreview(url) {
+    let img = document.getElementById('imgPreviewImg');
+    const ph = document.getElementById('imgPlaceholder');
+    if (ph) ph.remove();
+    if (!img) {
+      img = document.createElement('img');
+      img.id = 'imgPreviewImg';
+      img.alt = 'Product preview';
+      preview.appendChild(img);
+    }
+    img.src = url;
+    if (clearBtn) clearBtn.hidden = false;
+  }
+
+  function assignFile(file) {
+    try {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      main.files = dt.files;
+    } catch (_) { /* older browsers keep original input */ }
+  }
+
+  function compressImage(file) {
+    return new Promise((resolve, reject) => {
+      if (!file || !file.type || !file.type.startsWith('image/')) {
+        reject(new Error('Please choose a JPG, PNG, or WebP image.'));
+        return;
+      }
+      // Skip compression for small files / webp already small
+      if (file.size < 900 * 1024 && file.type !== 'image/heic' && file.type !== 'image/heif') {
+        resolve(file);
+        return;
+      }
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        let { width, height } = img;
+        const scale = Math.min(1, MAX_EDGE / Math.max(width, height));
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (!blob) { resolve(file); return; }
+          const name = (file.name || 'product').replace(/\.\w+$/, '') + '.jpg';
+          resolve(new File([blob], name, { type: 'image/jpeg', lastModified: Date.now() }));
+        }, 'image/jpeg', JPEG_Q);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('Could not read that image. Try JPG or PNG.'));
+      };
+      img.src = url;
+    });
+  }
+
+  async function onPick(file) {
+    if (!file) return;
+    setStatus('Preparing image…', true);
+    try {
+      const out = await compressImage(file);
+      assignFile(out);
+      showPreview(URL.createObjectURL(out));
+      const kb = Math.round(out.size / 1024);
+      setStatus('Ready to upload · ' + kb + ' KB (shows on POS after save)', true);
+    } catch (err) {
+      setStatus(err.message || 'Image failed', true);
+      main.value = '';
+    }
+  }
+
+  main.addEventListener('change', () => onPick(main.files && main.files[0]));
+  if (camera) {
+    camera.addEventListener('change', () => {
+      const f = camera.files && camera.files[0];
+      onPick(f);
+      camera.value = '';
+    });
+  }
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      main.value = '';
+      const img = document.getElementById('imgPreviewImg');
+      if (img) img.remove();
+      if (!document.getElementById('imgPlaceholder')) {
+        preview.innerHTML = '<div class="img-upload-placeholder" id="imgPlaceholder"><i class="fa-solid fa-camera" aria-hidden="true"></i><span>No image yet</span></div>';
+      }
+      clearBtn.hidden = true;
+      setStatus('', false);
+    });
+  }
+})();
 </script>
 <?php $content=ob_get_clean(); require __DIR__.'/../layouts/main.php'; ?>

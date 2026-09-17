@@ -28,6 +28,61 @@ class ProductModel {
         return $stmt->fetchAll();
     }
 
+    /** Product list grouped by style (one row per main product, not per size). */
+    public function allStyles(array $f = []): array {
+        $w = ['p.is_active = 1']; $params = [];
+        if (!empty($f['category_id'])) { $w[] = 'p.category_id = ?'; $params[] = $f['category_id']; }
+        if (!empty($f['gender']))      { $w[] = 'p.gender = ?';      $params[] = $f['gender']; }
+        if (!empty($f['search'])) {
+            if ($this->hasSkuColumn()) {
+                $w[] = '(p.name LIKE ? OR p.design LIKE ? OR p.barcode LIKE ? OR p.sku LIKE ? OR p.size LIKE ?)';
+                $q = '%'.$f['search'].'%';
+                array_push($params, $q, $q, $q, $q, $q);
+            } else {
+                $w[] = '(p.name LIKE ? OR p.design LIKE ? OR p.barcode LIKE ? OR p.size LIKE ?)';
+                $q = '%'.$f['search'].'%';
+                array_push($params, $q, $q, $q, $q);
+            }
+        }
+        $where = implode(' AND ', $w);
+        $groupExpr = $this->hasStyleKeyColumn()
+            ? "COALESCE(NULLIF(TRIM(p.style_key), ''), CONCAT(p.category_id,'|',p.name,'|',p.gender,'|',COALESCE(p.design,'')))"
+            : 'p.category_id, p.name, p.gender, COALESCE(p.design, \'\')';
+
+        $skuSelect = $this->hasSkuColumn() ? 'MAX(p.sku) AS sku,' : 'NULL AS sku,';
+        $having = !empty($f['low_stock'])
+            ? ' HAVING SUM(CASE WHEN p.quantity <= p.low_stock_threshold THEN 1 ELSE 0 END) > 0'
+            : '';
+
+        $sql = "SELECT
+                    MIN(p.id) AS id,
+                    p.category_id,
+                    p.name,
+                    p.gender,
+                    COALESCE(p.design, '') AS design,
+                    c.name AS category_name,
+                    MAX(p.image) AS image,
+                    $skuSelect
+                    MIN(p.selling_price) AS price_min,
+                    MAX(p.selling_price) AS price_max,
+                    MIN(p.cost_price) AS cost_min,
+                    MAX(p.cost_price) AS cost_max,
+                    SUM(p.quantity) AS quantity,
+                    MIN(p.low_stock_threshold) AS low_stock_threshold,
+                    COUNT(*) AS size_count,
+                    SUM(CASE WHEN p.quantity <= p.low_stock_threshold THEN 1 ELSE 0 END) AS low_size_count,
+                    GROUP_CONCAT(DISTINCT p.size ORDER BY p.size+0 SEPARATOR ', ') AS sizes
+                FROM products p
+                JOIN categories c ON p.category_id = c.id
+                WHERE $where
+                GROUP BY $groupExpr, p.category_id, p.name, p.gender, COALESCE(p.design, ''), c.name, c.sort_order
+                $having
+                ORDER BY c.sort_order, p.name, p.gender, COALESCE(p.design, '')";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
     public function findById(int $id): ?array {
         $stmt = $this->db->prepare("SELECT p.*, c.name AS category_name FROM products p JOIN categories c ON p.category_id=c.id WHERE p.id=?");
         $stmt->execute([$id]);
@@ -479,6 +534,21 @@ class ProductModel {
 
     public function softDelete(int $id): void {
         $this->db->prepare("UPDATE products SET is_active=0 WHERE id=?")->execute([$id]);
+    }
+
+    /** Soft-delete every size variant of the same style. */
+    public function softDeleteStyle(int $id): int {
+        $siblings = $this->siblings($id, true);
+        if (!$siblings) {
+            $this->softDelete($id);
+            return 1;
+        }
+        $n = 0;
+        foreach ($siblings as $s) {
+            $this->softDelete((int)$s['id']);
+            $n++;
+        }
+        return $n;
     }
 
     public function getLowStockAlerts(bool $unreadOnly = false): array {

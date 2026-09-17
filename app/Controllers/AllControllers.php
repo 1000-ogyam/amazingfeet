@@ -31,10 +31,11 @@ class ProductController {
 
     public function index(): void {
         $filters   = array_filter($_GET, fn($v) => $v !== '');
-        $products  = $this->pm->all($filters);
+        $products  = $this->pm->allStyles($filters);
         $categories = $this->cm->all();
         $stockValue = $this->pm->getStockValue();
-        view('owner/products', compact('products','categories','filters','stockValue'));
+        $variantCount = array_sum(array_map(fn($p) => (int)($p['size_count'] ?? 1), $products));
+        view('owner/products', compact('products','categories','filters','stockValue','variantCount'));
     }
 
     public function create(): void {
@@ -47,7 +48,10 @@ class ProductController {
         $image = null;
         if (!empty($_FILES['image']['name'])) {
             $image = $this->handleUpload();
-            if (!$image) { flash('error','Invalid image file.'); redirect('/products/create'); }
+            if (!$image) {
+                flash('error', 'Could not upload image. Use JPG, PNG, or WebP under 8MB.');
+                redirect('/products/create');
+            }
         }
 
         $sizes = $this->parseSizeRows($_POST['sizes'] ?? []);
@@ -87,6 +91,10 @@ class ProductController {
         $image = null;
         if (!empty($_FILES['image']['name'])) {
             $image = $this->handleUpload();
+            if (!$image) {
+                flash('error', 'Could not upload image. Use JPG, PNG, or WebP under 8MB.');
+                redirect('/products/'.$id.'/edit');
+            }
         }
         $d = [
             'category_id'         => (int)$_POST['category_id'],
@@ -159,8 +167,8 @@ class ProductController {
 
     public function delete(string $id): void {
         verifyCsrf();
-        $this->pm->softDelete((int)$id);
-        flash('success','Product removed.');
+        $n = $this->pm->softDeleteStyle((int)$id);
+        flash('success', $n > 1 ? "Product and {$n} sizes removed." : 'Product removed.');
         redirect('/products');
     }
 
@@ -176,12 +184,43 @@ class ProductController {
     }
 
     private function handleUpload(): ?string {
-        $f   = $_FILES['image'];
-        $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
-        if (!in_array($ext,['jpg','jpeg','png','webp'])) return null;
-        if ($f['size'] > 3*1024*1024) return null;
-        $name = 'prod_'.uniqid().'.'.$ext;
-        move_uploaded_file($f['tmp_name'], UPLOAD_PATH.$name);
+        if (empty($_FILES['image']) || !is_array($_FILES['image'])) return null;
+        $f = $_FILES['image'];
+        $err = (int)($f['error'] ?? UPLOAD_ERR_NO_FILE);
+        if ($err === UPLOAD_ERR_NO_FILE) return null;
+        if ($err !== UPLOAD_ERR_OK) return null;
+        if (!is_uploaded_file($f['tmp_name'] ?? '')) return null;
+
+        $ext = strtolower(pathinfo((string)($f['name'] ?? ''), PATHINFO_EXTENSION));
+        // iPhone sometimes sends HEIC/empty ext — sniff MIME and map
+        $mime = '';
+        if (function_exists('finfo_open')) {
+            $fi = finfo_open(FILEINFO_MIME_TYPE);
+            if ($fi) {
+                $mime = (string)finfo_file($fi, $f['tmp_name']);
+                finfo_close($fi);
+            }
+        }
+        $mimeMap = [
+            'image/jpeg' => 'jpg',
+            'image/png'  => 'png',
+            'image/webp' => 'webp',
+        ];
+        if (isset($mimeMap[$mime])) {
+            $ext = $mimeMap[$mime];
+        } elseif (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+            return null;
+        }
+        if ($ext === 'jpeg') $ext = 'jpg';
+
+        // Phone photos can be large; allow up to 8MB (client also compresses)
+        if ((int)$f['size'] > 8 * 1024 * 1024) return null;
+
+        if (!is_dir(UPLOAD_PATH)) {
+            @mkdir(UPLOAD_PATH, 0755, true);
+        }
+        $name = 'prod_' . uniqid('', true) . '.' . $ext;
+        if (!move_uploaded_file($f['tmp_name'], UPLOAD_PATH . $name)) return null;
         return $name;
     }
 }
