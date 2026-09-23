@@ -537,17 +537,22 @@ class ProductModel {
      * Apply cost and/or sell price across style families.
      * @param list<int> $styleProductIds Any product id from each style (siblings resolved)
      * @param ?string $sizeOnly When set, only update that size within each style
-     * @return array{updated:int, styles:int, matched_styles:int}
+     * @param array{only_empty?:bool,mode?:string} $opts mode=set|adjust; only_empty skips non-zero prices
+     * @return array{updated:int, styles:int, matched_styles:int, skipped:int}
      */
-    public function applyPricesToStyles(array $styleProductIds, ?float $cost, ?float $sell, ?string $sizeOnly = null): array {
+    public function applyPricesToStyles(array $styleProductIds, ?float $cost, ?float $sell, ?string $sizeOnly = null, array $opts = []): array {
         $ids = array_values(array_unique(array_filter(array_map('intval', $styleProductIds), static fn($id) => $id > 0)));
         $sizeOnly = $sizeOnly !== null ? trim($sizeOnly) : '';
+        $onlyEmpty = !empty($opts['only_empty']);
+        $mode = (($opts['mode'] ?? 'set') === 'adjust') ? 'adjust' : 'set';
+
         if (!$ids || ($cost === null && $sell === null)) {
-            return ['updated' => 0, 'styles' => 0, 'matched_styles' => 0];
+            return ['updated' => 0, 'styles' => 0, 'matched_styles' => 0, 'skipped' => 0];
         }
 
         $updated = 0;
         $matchedStyles = 0;
+        $skipped = 0;
         foreach ($ids as $id) {
             $siblings = $this->siblings($id, true);
             if (!$siblings) continue;
@@ -556,15 +561,38 @@ class ProductModel {
                 if ($sizeOnly !== '' && strcasecmp(trim((string)$s['size']), $sizeOnly) !== 0) {
                     continue;
                 }
+
+                $applyCost = $cost !== null;
+                $applySell = $sell !== null;
+                if ($onlyEmpty && $mode === 'set') {
+                    if ($applyCost && (float)$s['cost_price'] > 0) $applyCost = false;
+                    if ($applySell && (float)$s['selling_price'] > 0) $applySell = false;
+                }
+                if (!$applyCost && !$applySell) {
+                    $skipped++;
+                    continue;
+                }
+
                 $sets = [];
                 $params = [];
-                if ($cost !== null) {
-                    $sets[] = 'cost_price=?';
-                    $params[] = $cost;
-                }
-                if ($sell !== null) {
-                    $sets[] = 'selling_price=?';
-                    $params[] = $sell;
+                if ($mode === 'adjust') {
+                    if ($applyCost) {
+                        $sets[] = 'cost_price = GREATEST(0, cost_price + ?)';
+                        $params[] = $cost;
+                    }
+                    if ($applySell) {
+                        $sets[] = 'selling_price = GREATEST(0, selling_price + ?)';
+                        $params[] = $sell;
+                    }
+                } else {
+                    if ($applyCost) {
+                        $sets[] = 'cost_price=?';
+                        $params[] = $cost;
+                    }
+                    if ($applySell) {
+                        $sets[] = 'selling_price=?';
+                        $params[] = $sell;
+                    }
                 }
                 if (!$sets) continue;
                 $params[] = (int)$s['id'];
@@ -580,12 +608,13 @@ class ProductModel {
             'updated' => $updated,
             'styles' => count($ids),
             'matched_styles' => $matchedStyles,
+            'skipped' => $skipped,
         ];
     }
 
     /** Apply cost/sell to every size in the same style as $productId. */
-    public function applyPricesToFamily(int $productId, ?float $cost, ?float $sell): int {
-        $r = $this->applyPricesToStyles([$productId], $cost, $sell, null);
+    public function applyPricesToFamily(int $productId, ?float $cost, ?float $sell, array $opts = []): int {
+        $r = $this->applyPricesToStyles([$productId], $cost, $sell, null, $opts);
         return $r['updated'];
     }
 

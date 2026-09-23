@@ -161,8 +161,14 @@ class ProductController {
     public function bulkPrices(): void {
         verifyCsrf();
         $ids = array_values(array_filter(array_map('intval', (array)($_POST['ids'] ?? [])), static fn($id) => $id > 0));
+        // Modal include list overrides table selection when present
+        if (isset($_POST['include_ids']) && is_array($_POST['include_ids'])) {
+            $ids = array_values(array_filter(array_map('intval', $_POST['include_ids']), static fn($id) => $id > 0));
+        }
         $scope = $_POST['scope'] ?? 'all';
         $size = trim((string)($_POST['size'] ?? ''));
+        $mode = ($_POST['price_mode'] ?? 'set') === 'adjust' ? 'adjust' : 'set';
+        $onlyEmpty = !empty($_POST['only_empty']);
         $costRaw = trim((string)($_POST['cost_price'] ?? ''));
         $sellRaw = trim((string)($_POST['selling_price'] ?? ''));
         $cost = $costRaw === '' ? null : (float)$costRaw;
@@ -180,7 +186,7 @@ class ProductController {
         $back = '/products' . ($returnQs !== '' ? '?'.$returnQs : '');
 
         if (!$ids) {
-            flash('error', 'Select at least one product.');
+            flash('error', 'Select at least one product to update (or un-exclude some).');
             redirect($back);
         }
         if ($cost === null && $sell === null) {
@@ -193,17 +199,27 @@ class ProductController {
         }
 
         $sizeFilter = $scope === 'size' ? $size : null;
-        $r = $this->pm->applyPricesToStyles($ids, $cost, $sell, $sizeFilter);
+        $r = $this->pm->applyPricesToStyles($ids, $cost, $sell, $sizeFilter, [
+            'only_empty' => $onlyEmpty,
+            'mode' => $mode,
+        ]);
 
         if ($r['updated'] === 0) {
-            flash('error', $scope === 'size'
-                ? "No size \"{$size}\" found on the selected products."
-                : 'No prices were updated.');
+            $msg = $scope === 'size'
+                ? "No size \"{$size}\" found on the included products."
+                : 'No prices were updated.';
+            if ($onlyEmpty && ($r['skipped'] ?? 0) > 0) {
+                $msg = 'Nothing changed — those prices were already set (empty-only mode).';
+            }
+            flash('error', $msg);
         } else {
             $parts = [];
-            $parts[] = "Updated {$r['updated']} size variant".($r['updated']===1?'':'s');
+            $action = $mode === 'adjust' ? 'Adjusted' : 'Updated';
+            $parts[] = "{$action} {$r['updated']} size variant".($r['updated']===1?'':'s');
             $parts[] = "across {$r['matched_styles']} product".($r['matched_styles']===1?'':'s');
             if ($scope === 'size') $parts[] = "(size {$size})";
+            if ($onlyEmpty) $parts[] = '(empty prices only)';
+            if (($r['skipped'] ?? 0) > 0) $parts[] = "— skipped {$r['skipped']} already priced";
             flash('success', implode(' ', $parts).'.');
         }
         redirect($back);

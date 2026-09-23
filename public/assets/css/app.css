@@ -519,6 +519,44 @@ canvas{max-width:100%}
   background:var(--bg3);border:1px solid var(--border);border-radius:8px;
   padding:.75rem .85rem;margin-bottom:1rem;
 }
+.bulk-price-modal{max-width:min(860px,calc(100vw - 1.25rem));padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:min(92dvh,760px)}
+.bulk-price-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.85rem 1rem;border-bottom:1px solid var(--border)}
+.bulk-price-head h3{margin:0;font-size:1.05rem;display:flex;align-items:center;gap:.4rem}
+.bulk-price-lead{margin:0;padding:.65rem 1rem 0}
+.bulk-price-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:1rem;padding:.75rem 1rem;overflow:auto;min-height:0}
+.bulk-opt-check{display:flex;align-items:flex-start;gap:.4rem;font-weight:500;text-transform:none;letter-spacing:0;font-size:.82rem;margin:.15rem 0}
+.bulk-include-head{display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.4rem}
+.bulk-include-actions{display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.45rem}
+.bulk-include-list{
+  border:1px solid var(--border);border-radius:8px;background:var(--bg3);
+  max-height:280px;overflow:auto;padding:.35rem;
+}
+.bulk-include-item{
+  display:flex;gap:.5rem;align-items:flex-start;padding:.45rem .5rem;border-radius:7px;
+  margin:0;font-weight:400;text-transform:none;letter-spacing:0;cursor:pointer;
+}
+.bulk-include-item:hover{background:var(--bg2)}
+.bulk-include-item.is-excluded{opacity:.55}
+.bulk-include-item.is-missing-size{background:rgba(214,53,53,.06)}
+.bulk-include-meta{display:flex;flex-direction:column;gap:.1rem;min-width:0}
+.bulk-include-name{font-size:.84rem;font-weight:600}
+.bulk-include-sizes{font-size:.72rem}
+.bulk-include-status{font-size:.7rem;font-weight:600}
+.bulk-include-status.ok{color:var(--accent2)}
+.bulk-include-status.warn{color:var(--danger)}
+.bulk-price-summary{
+  margin:0 1rem .75rem;padding:.65rem .75rem;border-radius:8px;background:var(--bg3);
+  border:1px solid var(--border);font-size:.84rem;color:var(--muted);
+}
+.bulk-price-summary.is-ready{color:var(--text);border-color:rgba(200,83,42,.35);background:rgba(200,83,42,.06)}
+.bulk-price-actions{
+  display:flex;gap:.5rem;flex-wrap:wrap;padding:.75rem 1rem calc(.75rem + env(safe-area-inset-bottom,0px));
+  border-top:1px solid var(--border);background:var(--bg2);
+}
+@media(max-width:760px){
+  .bulk-price-grid{grid-template-columns:1fr}
+  .bulk-include-list{max-height:200px}
+}
 .products-name-cell,.products-table .col-design,.products-table .col-sku{
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }

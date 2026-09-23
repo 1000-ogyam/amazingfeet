@@ -138,7 +138,8 @@ ob_start();
           <tr>
             <td class="col-check">
               <input type="checkbox" name="ids[]" value="<?= (int)$p['id'] ?>" class="product-row-check"
-                     data-sizes="<?= $sizesAttr ?>" style="width:auto" aria-label="Select <?= e($p['name']) ?>">
+                     data-sizes="<?= $sizesAttr ?>" data-name="<?= e($p['name']) ?>"
+                     style="width:auto" aria-label="Select <?= e($p['name']) ?>">
             </td>
             <td class="products-name-cell" title="<?= e($p['name']) ?>"><?= e($p['name']) ?></td>
             <td class="mono text-sm col-sku"><?= e($p['sku'] ?? '—') ?></td>
@@ -213,48 +214,83 @@ ob_start();
 
   <!-- Bulk price modal -->
   <div class="modal-overlay hidden" id="bulkPriceModal" role="presentation">
-    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="bulkPriceTitle" style="max-width:480px">
-      <h3 id="bulkPriceTitle" style="margin-bottom:.35rem"><i class="fa-solid fa-tags" aria-hidden="true"></i> Apply prices</h3>
-      <p class="text-muted text-sm" style="margin-bottom:1rem">
-        Set cost and/or sell price on <strong id="bulkPriceSelectedLbl">0</strong> selected product<span id="bulkPricePlural">s</span>.
-        Leave a price blank to keep existing values.
+    <div class="modal-box bulk-price-modal" role="dialog" aria-modal="true" aria-labelledby="bulkPriceTitle">
+      <div class="bulk-price-head">
+        <h3 id="bulkPriceTitle"><i class="fa-solid fa-tags" aria-hidden="true"></i> Apply prices</h3>
+        <button type="button" class="btn btn-ghost btn-sm" id="closeBulkPriceModal" aria-label="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </div>
+      <p class="text-muted text-sm bulk-price-lead">
+        Choose which products to include, then set cost and/or sell. Leave a price blank to skip that field.
       </p>
 
-      <div class="form-group">
-        <label>Apply to</label>
-        <select name="scope" id="bulkScope">
-          <option value="all">All sizes in selected products</option>
-          <option value="size">One size only (same size across products)</option>
-        </select>
-      </div>
+      <div class="bulk-price-grid">
+        <div class="bulk-price-main">
+          <div class="form-group">
+            <label>1. Apply to</label>
+            <select name="scope" id="bulkScope">
+              <option value="all">All sizes in included products</option>
+              <option value="size">One size only (same size across products)</option>
+            </select>
+          </div>
 
-      <div class="form-group" id="bulkSizeWrap" hidden>
-        <label>Size *</label>
-        <input type="text" name="size" id="bulkSizeInput" list="bulkSizeList" placeholder="e.g. 32" autocomplete="off">
-        <datalist id="bulkSizeList">
-          <?php foreach (array_keys($sizeHints) as $sz): ?>
-          <option value="<?= e($sz) ?>">
-          <?php endforeach; ?>
-        </datalist>
-        <p class="text-muted text-sm" style="margin-top:.35rem">Example: set sell price for size 32 on products A, B, and C.</p>
-      </div>
+          <div class="form-group" id="bulkSizeWrap" hidden>
+            <label>Size *</label>
+            <input type="text" name="size" id="bulkSizeInput" list="bulkSizeList" placeholder="e.g. 32" autocomplete="off">
+            <datalist id="bulkSizeList"></datalist>
+            <label class="bulk-opt-check" id="bulkAutoExcludeWrap" style="margin-top:.45rem">
+              <input type="checkbox" id="bulkAutoExclude" checked style="width:auto">
+              Auto-exclude products that don’t have this size
+            </label>
+          </div>
 
-      <div class="form-row">
-        <div class="form-group">
-          <label>Cost price (GHS)</label>
-          <input type="number" name="cost_price" id="bulkCost" step="0.01" min="0" placeholder="Leave blank = no change">
+          <div class="form-group">
+            <label>2. Price change</label>
+            <select name="price_mode" id="bulkPriceMode">
+              <option value="set">Set to this price</option>
+              <option value="adjust">Adjust by amount (+ / −)</option>
+            </select>
+            <p class="text-muted text-sm" id="bulkModeHint" style="margin-top:.35rem">Example: set sell to 180.00 for every included size.</p>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label id="bulkCostLbl">Cost (GHS)</label>
+              <input type="number" name="cost_price" id="bulkCost" step="0.01" placeholder="Blank = skip">
+            </div>
+            <div class="form-group">
+              <label id="bulkSellLbl">Sell (GHS)</label>
+              <input type="number" name="selling_price" id="bulkSell" step="0.01" placeholder="Blank = skip">
+            </div>
+          </div>
+
+          <label class="bulk-opt-check">
+            <input type="checkbox" name="only_empty" id="bulkOnlyEmpty" value="1" style="width:auto">
+            Only fill empty / zero prices (don’t overwrite existing)
+          </label>
         </div>
-        <div class="form-group">
-          <label>Selling price (GHS)</label>
-          <input type="number" name="selling_price" id="bulkSell" step="0.01" min="0" placeholder="Leave blank = no change">
+
+        <div class="bulk-price-side">
+          <div class="bulk-include-head">
+            <strong>3. Products to include</strong>
+            <span class="text-muted text-sm" id="bulkIncludeCount">0</span>
+          </div>
+          <div class="bulk-include-actions">
+            <button type="button" class="btn btn-ghost btn-xs" id="bulkIncludeAll">All</button>
+            <button type="button" class="btn btn-ghost btn-xs" id="bulkIncludeNone">None</button>
+            <button type="button" class="btn btn-ghost btn-xs" id="bulkIncludeHasSize" hidden>Only with size</button>
+          </div>
+          <div class="bulk-include-list" id="bulkIncludeList" aria-label="Included products"></div>
+          <p class="text-muted text-sm" style="margin-top:.45rem">Uncheck any product to exclude it from this update.</p>
         </div>
       </div>
 
-      <div class="flex gap-1" style="flex-wrap:wrap;margin-top:.5rem">
+      <div class="bulk-price-summary" id="bulkPriceSummary">Select products to see a preview.</div>
+
+      <div class="bulk-price-actions">
         <button type="submit" class="btn btn-primary" id="bulkPriceSubmit">
           <i class="fa-solid fa-check" aria-hidden="true"></i> Apply now
         </button>
-        <button type="button" class="btn btn-ghost" id="closeBulkPriceModal">Cancel</button>
+        <button type="button" class="btn btn-ghost" id="closeBulkPriceModal2">Cancel</button>
       </div>
     </div>
   </div>
@@ -270,11 +306,32 @@ ob_start();
   const scope = document.getElementById('bulkScope');
   const sizeWrap = document.getElementById('bulkSizeWrap');
   const sizeInput = document.getElementById('bulkSizeInput');
-  const selectedLbl = document.getElementById('bulkPriceSelectedLbl');
-  const plural = document.getElementById('bulkPricePlural');
   const sizeList = document.getElementById('bulkSizeList');
+  const includeList = document.getElementById('bulkIncludeList');
+  const includeCount = document.getElementById('bulkIncludeCount');
+  const autoExclude = document.getElementById('bulkAutoExclude');
+  const hasSizeBtn = document.getElementById('bulkIncludeHasSize');
+  const priceMode = document.getElementById('bulkPriceMode');
+  const modeHint = document.getElementById('bulkModeHint');
+  const onlyEmpty = document.getElementById('bulkOnlyEmpty');
+  const summary = document.getElementById('bulkPriceSummary');
+  const costInput = document.getElementById('bulkCost');
+  const sellInput = document.getElementById('bulkSell');
 
   const checks = () => [...form.querySelectorAll('.product-row-check')];
+  const includeChecks = () => [...includeList.querySelectorAll('.bulk-include-check')];
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  }
+  function parseSizes(raw) {
+    return String(raw || '').split(',').map(s => s.trim()).filter(Boolean);
+  }
+  function hasSize(sizes, size) {
+    const t = String(size || '').trim().toLowerCase();
+    if (!t) return true;
+    return sizes.some(s => s.toLowerCase() === t);
+  }
 
   function sync() {
     const list = checks();
@@ -285,20 +342,92 @@ ob_start();
       selectAll.checked = list.length > 0 && n === list.length;
       selectAll.indeterminate = n > 0 && n < list.length;
     }
-    selectedLbl.textContent = String(n);
-    plural.textContent = n === 1 ? '' : 's';
   }
 
-  function refreshSizeHints() {
+  function refreshSizeHints(fromInclude) {
     const set = new Set();
-    checks().filter(c => c.checked).forEach(c => {
-      String(c.dataset.sizes || '').split(',').forEach(s => {
-        const t = s.trim();
-        if (t) set.add(t);
-      });
-    });
+    const source = fromInclude
+      ? includeChecks().filter(c => c.checked)
+      : checks().filter(c => c.checked);
+    source.forEach(c => parseSizes(c.dataset.sizes).forEach(s => set.add(s)));
     const sorted = [...set].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-    sizeList.innerHTML = sorted.map(s => '<option value="' + s.replace(/"/g, '&quot;') + '">').join('');
+    sizeList.innerHTML = sorted.map(s => '<option value="' + esc(s) + '">').join('');
+  }
+
+  function buildIncludeList() {
+    const selected = checks().filter(c => c.checked);
+    includeList.innerHTML = selected.map(c => {
+      const id = c.value;
+      const name = c.dataset.name || ('Product #' + id);
+      const sizes = parseSizes(c.dataset.sizes);
+      return `<label class="bulk-include-item" data-id="${esc(id)}">
+        <input type="checkbox" class="bulk-include-check" name="include_ids[]" value="${esc(id)}"
+               data-sizes="${esc(sizes.join(', '))}" data-name="${esc(name)}" checked style="width:auto">
+        <span class="bulk-include-meta">
+          <span class="bulk-include-name">${esc(name)}</span>
+          <span class="bulk-include-sizes text-muted">${sizes.length ? ('Sizes: ' + esc(sizes.join(', '))) : 'No sizes listed'}</span>
+          <span class="bulk-include-status"></span>
+        </span>
+      </label>`;
+    }).join('') || '<p class="text-muted text-sm">No products selected.</p>';
+    updateIncludeUI();
+  }
+
+  function updateIncludeUI() {
+    const sizeMode = scope.value === 'size';
+    const size = sizeInput.value.trim();
+    sizeWrap.hidden = !sizeMode;
+    sizeInput.required = sizeMode;
+    hasSizeBtn.hidden = !sizeMode;
+    document.getElementById('bulkAutoExcludeWrap').style.display = sizeMode ? '' : 'none';
+
+    let included = 0;
+    let missing = 0;
+    includeChecks().forEach(c => {
+      const item = c.closest('.bulk-include-item');
+      const status = item.querySelector('.bulk-include-status');
+      const sizes = parseSizes(c.dataset.sizes);
+      const match = !sizeMode || !size || hasSize(sizes, size);
+      item.classList.toggle('is-missing-size', sizeMode && !!size && !match);
+      if (sizeMode && size && autoExclude.checked && !match) {
+        c.checked = false;
+      }
+      item.classList.toggle('is-excluded', !c.checked);
+      if (sizeMode && size) {
+        status.textContent = match ? ('Has size ' + size) : ('No size ' + size);
+        status.className = 'bulk-include-status ' + (match ? 'ok' : 'warn');
+      } else {
+        status.textContent = '';
+        status.className = 'bulk-include-status';
+      }
+      if (c.checked) {
+        included++;
+        if (sizeMode && size && !match) missing++;
+      }
+    });
+
+    includeCount.textContent = included + ' included';
+    refreshSizeHints(true);
+
+    const cost = costInput.value.trim();
+    const sell = sellInput.value.trim();
+    const mode = priceMode.value;
+    let line = included + ' product' + (included === 1 ? '' : 's') + ' included';
+    if (sizeMode && size) {
+      line += ' · targeting size ' + size;
+      if (missing > 0) line += ' · ' + missing + ' without that size still checked';
+    } else if (!sizeMode) {
+      line += ' · all their sizes';
+    }
+    if (cost || sell) {
+      const bits = [];
+      if (cost) bits.push((mode === 'adjust' ? ((Number(cost) >= 0 ? '+' : '') + cost) : cost) + ' cost');
+      if (sell) bits.push((mode === 'adjust' ? ((Number(sell) >= 0 ? '+' : '') + sell) : sell) + ' sell');
+      line += ' · ' + (mode === 'adjust' ? 'adjust ' : 'set ') + bits.join(' & ');
+    }
+    if (onlyEmpty.checked && mode === 'set') line += ' · empty prices only';
+    summary.textContent = line;
+    summary.classList.toggle('is-ready', included > 0 && (!!cost || !!sell) && (!sizeMode || !!size));
   }
 
   if (selectAll) {
@@ -309,31 +438,69 @@ ob_start();
   }
   form.addEventListener('change', e => {
     if (e.target.classList.contains('product-row-check')) sync();
+    if (e.target.classList.contains('bulk-include-check') || e.target === autoExclude || e.target === onlyEmpty || e.target === priceMode || e.target === scope) {
+      updateIncludeUI();
+    }
+  });
+  sizeInput.addEventListener('input', updateIncludeUI);
+  costInput.addEventListener('input', updateIncludeUI);
+  sellInput.addEventListener('input', updateIncludeUI);
+
+  priceMode.addEventListener('change', () => {
+    const adj = priceMode.value === 'adjust';
+    document.getElementById('bulkCostLbl').textContent = adj ? 'Cost change (GHS)' : 'Cost (GHS)';
+    document.getElementById('bulkSellLbl').textContent = adj ? 'Sell change (GHS)' : 'Sell (GHS)';
+    costInput.placeholder = adj ? 'e.g. 5 or -5' : 'Blank = skip';
+    sellInput.placeholder = adj ? 'e.g. 10 or -10' : 'Blank = skip';
+    if (adj) { costInput.removeAttribute('min'); sellInput.removeAttribute('min'); }
+    else { costInput.min = '0'; sellInput.min = '0'; }
+    modeHint.textContent = adj
+      ? 'Example: enter 10 to add GHS 10, or -5 to reduce by GHS 5.'
+      : 'Example: set sell to 180.00 for every included size.';
+    onlyEmpty.disabled = adj;
+    if (adj) onlyEmpty.checked = false;
+    updateIncludeUI();
   });
 
-  scope.addEventListener('change', () => {
-    const one = scope.value === 'size';
-    sizeWrap.hidden = !one;
-    sizeInput.required = one;
+  document.getElementById('bulkIncludeAll').addEventListener('click', () => {
+    includeChecks().forEach(c => { c.checked = true; });
+    updateIncludeUI();
+  });
+  document.getElementById('bulkIncludeNone').addEventListener('click', () => {
+    includeChecks().forEach(c => { c.checked = false; });
+    updateIncludeUI();
+  });
+  hasSizeBtn.addEventListener('click', () => {
+    const size = sizeInput.value.trim();
+    includeChecks().forEach(c => {
+      c.checked = hasSize(parseSizes(c.dataset.sizes), size);
+    });
+    updateIncludeUI();
   });
 
-  openBtn.addEventListener('click', () => {
-    refreshSizeHints();
+  function openModal() {
+    buildIncludeList();
+    refreshSizeHints(false);
     modal.classList.remove('hidden');
-  });
-  document.getElementById('closeBulkPriceModal').addEventListener('click', () => modal.classList.add('hidden'));
-  modal.addEventListener('click', e => { if (e.target === modal) modal.classList.add('hidden'); });
+    updateIncludeUI();
+  }
+  function closeModal() { modal.classList.add('hidden'); }
+
+  openBtn.addEventListener('click', openModal);
+  document.getElementById('closeBulkPriceModal').addEventListener('click', closeModal);
+  document.getElementById('closeBulkPriceModal2').addEventListener('click', closeModal);
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
 
   form.addEventListener('submit', e => {
-    if (e.submitter && e.submitter.getAttribute('formaction')) return; // delete buttons
-    const n = checks().filter(c => c.checked).length;
-    if (!n) {
+    if (e.submitter && e.submitter.getAttribute('formaction')) return;
+    const included = includeChecks().filter(c => c.checked);
+    if (!included.length) {
       e.preventDefault();
-      alert('Select at least one product.');
+      alert('Include at least one product (uncheck excludes it).');
       return;
     }
-    const cost = document.getElementById('bulkCost').value.trim();
-    const sell = document.getElementById('bulkSell').value.trim();
+    const cost = costInput.value.trim();
+    const sell = sellInput.value.trim();
     if (!cost && !sell) {
       e.preventDefault();
       alert('Enter a cost and/or selling price.');
@@ -344,10 +511,12 @@ ob_start();
       alert('Enter the size to update.');
       return;
     }
+    const n = included.length;
     const target = scope.value === 'size'
       ? ('size ' + sizeInput.value.trim() + ' on ' + n + ' product' + (n === 1 ? '' : 's'))
       : ('all sizes on ' + n + ' product' + (n === 1 ? '' : 's'));
-    if (!confirm('Apply these prices to ' + target + '?')) e.preventDefault();
+    const modeLabel = priceMode.value === 'adjust' ? 'Adjust prices for ' : 'Set prices for ';
+    if (!confirm(modeLabel + target + '?')) e.preventDefault();
   });
 
   const sel = document.getElementById('productsPerPage');
