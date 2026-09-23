@@ -139,6 +139,76 @@ class ProductController {
         redirect('/products/'.$id.'/edit');
     }
 
+    /** Apply cost and/or sell price to all sizes of this style. */
+    public function applyPrices(string $id): void {
+        verifyCsrf();
+        $costRaw = trim((string)($_POST['cost_price'] ?? ''));
+        $sellRaw = trim((string)($_POST['selling_price'] ?? ''));
+        $cost = $costRaw === '' ? null : (float)$costRaw;
+        $sell = $sellRaw === '' ? null : (float)$sellRaw;
+        if ($cost === null && $sell === null) {
+            flash('error', 'Enter a cost and/or selling price to apply.');
+            redirect('/products/'.$id.'/edit');
+        }
+        $n = $this->pm->applyPricesToFamily((int)$id, $cost, $sell);
+        flash('success', $n > 0
+            ? "Updated prices on {$n} size".($n === 1 ? '' : 's').'.'
+            : 'No sizes updated.');
+        redirect('/products/'.$id.'/edit');
+    }
+
+    /** Bulk apply prices across selected styles (all sizes or one size). */
+    public function bulkPrices(): void {
+        verifyCsrf();
+        $ids = array_values(array_filter(array_map('intval', (array)($_POST['ids'] ?? [])), static fn($id) => $id > 0));
+        $scope = $_POST['scope'] ?? 'all';
+        $size = trim((string)($_POST['size'] ?? ''));
+        $costRaw = trim((string)($_POST['cost_price'] ?? ''));
+        $sellRaw = trim((string)($_POST['selling_price'] ?? ''));
+        $cost = $costRaw === '' ? null : (float)$costRaw;
+        $sell = $sellRaw === '' ? null : (float)$sellRaw;
+
+        $returnQs = http_build_query(array_filter([
+            'search' => $_POST['return_search'] ?? '',
+            'category_id' => $_POST['return_category_id'] ?? '',
+            'gender' => $_POST['return_gender'] ?? '',
+            'low_stock' => $_POST['return_low_stock'] ?? '',
+            'page' => $_POST['return_page'] ?? '',
+            'per_page' => $_POST['return_per_page'] ?? '',
+        ], static fn($v) => $v !== '' && $v !== null));
+
+        $back = '/products' . ($returnQs !== '' ? '?'.$returnQs : '');
+
+        if (!$ids) {
+            flash('error', 'Select at least one product.');
+            redirect($back);
+        }
+        if ($cost === null && $sell === null) {
+            flash('error', 'Enter a cost and/or selling price to apply.');
+            redirect($back);
+        }
+        if ($scope === 'size' && $size === '') {
+            flash('error', 'Enter the size to update (e.g. 32).');
+            redirect($back);
+        }
+
+        $sizeFilter = $scope === 'size' ? $size : null;
+        $r = $this->pm->applyPricesToStyles($ids, $cost, $sell, $sizeFilter);
+
+        if ($r['updated'] === 0) {
+            flash('error', $scope === 'size'
+                ? "No size \"{$size}\" found on the selected products."
+                : 'No prices were updated.');
+        } else {
+            $parts = [];
+            $parts[] = "Updated {$r['updated']} size variant".($r['updated']===1?'':'s');
+            $parts[] = "across {$r['matched_styles']} product".($r['matched_styles']===1?'':'s');
+            if ($scope === 'size') $parts[] = "(size {$size})";
+            flash('success', implode(' ', $parts).'.');
+        }
+        redirect($back);
+    }
+
     public function addSize(string $id): void {
         verifyCsrf();
         $size = trim($_POST['size'] ?? '');

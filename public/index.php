@@ -109,10 +109,12 @@ $routes = [
 
     // ── Owner: Products ───────────────────────────────────────
     ['GET',  '/products',                 'ProductController',  'index',            ['owner']],
+    ['POST', '/products/bulk-prices',     'ProductController',  'bulkPrices',       ['owner']],
     ['GET',  '/products/create',          'ProductController',  'create',           ['owner']],
     ['POST', '/products/create',          'ProductController',  'store',            ['owner']],
     ['GET',  '/products/{id}/edit',       'ProductController',  'edit',             ['owner']],
     ['POST', '/products/{id}/edit',       'ProductController',  'update',           ['owner']],
+    ['POST', '/products/{id}/apply-prices','ProductController', 'applyPrices',      ['owner']],
     ['POST', '/products/{id}/sizes',      'ProductController',  'addSize',          ['owner']],
     ['POST', '/products/{id}/delete',     'ProductController',  'delete',           ['owner']],
     ['POST', '/products/{id}/stock',      'ProductController',  'adjustStock',      ['owner']],

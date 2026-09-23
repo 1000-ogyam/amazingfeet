@@ -67,17 +67,26 @@ ob_start();
         <div class="form-row">
           <div class="form-group">
             <label>Cost Price (GHS) *</label>
-            <input type="number" name="cost_price" required step="0.01" min="0" value="<?= e($product['cost_price']??'') ?>" placeholder="0.00">
+            <input type="number" name="cost_price" id="editCostPrice" required step="0.01" min="0" value="<?= e($product['cost_price']??'') ?>" placeholder="0.00">
           </div>
           <div class="form-group">
             <label>Selling Price (GHS) *</label>
-            <input type="number" name="selling_price" required step="0.01" min="0" value="<?= e($product['selling_price']??'') ?>" placeholder="0.00" oninput="calcMargin()">
+            <input type="number" name="selling_price" id="editSellPrice" required step="0.01" min="0" value="<?= e($product['selling_price']??'') ?>" placeholder="0.00" oninput="calcMargin()">
           </div>
         </div>
 
         <div id="marginDisplay" style="background:var(--bg3);border-radius:7px;padding:.65rem .9rem;margin-bottom:1rem;font-size:.85rem;display:none">
           Profit Margin: <strong id="marginVal" style="color:var(--accent2)">—</strong>
           &nbsp;|&nbsp; Profit per unit: <strong id="profitVal">—</strong>
+        </div>
+
+        <div class="apply-prices-box">
+          <p class="text-muted text-sm" style="margin:0 0 .5rem">Apply these prices to <strong>every size</strong> of this product (like when creating).</p>
+          <div class="flex-center gap-1" style="flex-wrap:wrap">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="applyFamilyPrices('both')"><i class="fa-solid fa-copy" aria-hidden="true"></i> Apply both to all sizes</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="applyFamilyPrices('cost')"><i class="fa-solid fa-coins" aria-hidden="true"></i> Cost → all sizes</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="applyFamilyPrices('sell')"><i class="fa-solid fa-tag" aria-hidden="true"></i> Sell → all sizes</button>
+          </div>
         </div>
         <?php else: ?>
         <div class="form-group">
@@ -102,7 +111,8 @@ ob_start();
           <div class="flex-center gap-1" style="margin-top:.65rem;flex-wrap:wrap">
             <button type="button" class="btn btn-ghost btn-sm" onclick="addSizeRow()"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add size row</button>
             <button type="button" class="btn btn-ghost btn-sm" onclick="fillSizeRange(28,40)"><i class="fa-solid fa-list-ol" aria-hidden="true"></i> Prefill 28–40</button>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="applyDefaultPrices()"><i class="fa-solid fa-copy" aria-hidden="true"></i> Apply prices to empty</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="applyDefaultPrices(false)"><i class="fa-solid fa-copy" aria-hidden="true"></i> Apply prices to empty</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="applyDefaultPrices(true)"><i class="fa-solid fa-tags" aria-hidden="true"></i> Apply prices to all sizes</button>
             <button type="button" class="btn btn-ghost btn-sm" onclick="applyDefaultSku(true)"><i class="fa-solid fa-tags" aria-hidden="true"></i> Apply SKU to all sizes</button>
           </div>
           <div class="form-row" style="margin-top:.85rem">
@@ -218,15 +228,16 @@ ob_start();
     <div class="card">
       <div class="card-header"><h3><i class="fa-solid fa-ruler-combined" aria-hidden="true"></i> All sizes</h3></div>
       <div class="card-body" style="padding-top:.35rem">
-        <p class="text-muted text-sm">Each size keeps its own price and stock. Editing name/category/design updates the whole style.</p>
+        <p class="text-muted text-sm">Each size keeps its own price and stock. Use “Apply … to all sizes” above to copy prices across the style.</p>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Size</th><th>SKU</th><th>Sell</th><th>Stock</th><th></th></tr></thead>
+            <thead><tr><th>Size</th><th>SKU</th><th>Cost</th><th>Sell</th><th>Stock</th><th></th></tr></thead>
             <tbody>
               <?php foreach ($variants as $v): ?>
               <tr style="<?= (int)$v['id']===(int)$product['id']?'background:rgba(200,83,42,.06)':'' ?>">
                 <td><strong>Sz <?= e($v['size']) ?></strong></td>
                 <td class="mono text-sm"><?= e($v['sku'] ?? '—') ?></td>
+                <td class="text-sm"><?= money($v['cost_price']) ?></td>
                 <td class="text-sm"><?= money($v['selling_price']) ?></td>
                 <td><span class="badge <?= $v['quantity']<=$v['low_stock_threshold']?'badge-low':'badge-ok' ?>"><?= (int)$v['quantity'] ?></span></td>
                 <td>
@@ -300,6 +311,42 @@ function calcMargin() {
 }
 document.querySelector('[name=cost_price]').addEventListener('input', calcMargin);
 calcMargin();
+
+function applyFamilyPrices(mode) {
+  const cost = document.getElementById('editCostPrice').value.trim();
+  const sell = document.getElementById('editSellPrice').value.trim();
+  let msg = '';
+  if (mode === 'cost') {
+    if (cost === '') { alert('Enter a cost price first.'); return; }
+    msg = 'Apply cost GHS ' + cost + ' to ALL sizes of this product?';
+  } else if (mode === 'sell') {
+    if (sell === '') { alert('Enter a selling price first.'); return; }
+    msg = 'Apply sell GHS ' + sell + ' to ALL sizes of this product?';
+  } else {
+    if (cost === '' && sell === '') { alert('Enter a cost and/or selling price first.'); return; }
+    msg = 'Apply these prices to ALL sizes of this product?';
+  }
+  if (!confirm(msg)) return;
+
+  const f = document.createElement('form');
+  f.method = 'POST';
+  f.action = <?= json_encode(BASE_PATH.'/products/'.(int)$product['id'].'/apply-prices') ?>;
+  const csrf = document.createElement('input');
+  csrf.type = 'hidden'; csrf.name = 'csrf'; csrf.value = <?= json_encode(csrf()) ?>;
+  f.appendChild(csrf);
+  if (mode === 'both' || mode === 'cost') {
+    const c = document.createElement('input');
+    c.type = 'hidden'; c.name = 'cost_price'; c.value = cost;
+    f.appendChild(c);
+  }
+  if (mode === 'both' || mode === 'sell') {
+    const s = document.createElement('input');
+    s.type = 'hidden'; s.name = 'selling_price'; s.value = sell;
+    f.appendChild(s);
+  }
+  document.body.appendChild(f);
+  f.submit();
+}
 <?php else: ?>
 let sizeRowIndex = 0;
 function addSizeRow(prefill = {}) {
@@ -359,24 +406,34 @@ function applyDefaultSku(overwriteAll) {
     sku.value = appendSize ? buildSku(base, size) : base;
   });
 }
-function applyDefaultPrices() {
+function applyDefaultPrices(overwriteAll) {
   const defC = document.getElementById('defaultCost').value;
   const defS = document.getElementById('defaultSell').value;
   document.querySelectorAll('#sizeRows tr').forEach(tr => {
     const cost = tr.querySelector('[name*="[cost_price]"]');
     const sell = tr.querySelector('[name*="[selling_price]"]');
-    if (defC !== '' && cost && !cost.value) cost.value = defC;
-    if (defS !== '' && sell && !sell.value) sell.value = defS;
+    if (defC !== '' && cost && (overwriteAll || !cost.value)) cost.value = defC;
+    if (defS !== '' && sell && (overwriteAll || !sell.value)) sell.value = defS;
   });
-  // Also copy first filled sell/cost across empties if defaults blank
-  const costs = [...document.querySelectorAll('#sizeRows [name*="[cost_price]"]')];
-  const sells = [...document.querySelectorAll('#sizeRows [name*="[selling_price]"]')];
-  const firstCost = costs.find(i => i.value !== '')?.value;
-  const firstSell = sells.find(i => i.value !== '')?.value;
-  costs.forEach(i => { if (!i.value && firstCost) i.value = firstCost; });
-  sells.forEach(i => { if (!i.value && firstSell) i.value = firstSell; });
-  // Same convenience for SKU empties
-  applyDefaultSku(false);
+  if (!overwriteAll) {
+    // Also copy first filled sell/cost across empties if defaults blank
+    const costs = [...document.querySelectorAll('#sizeRows [name*="[cost_price]"]')];
+    const sells = [...document.querySelectorAll('#sizeRows [name*="[selling_price]"]')];
+    const firstCost = costs.find(i => i.value !== '')?.value;
+    const firstSell = sells.find(i => i.value !== '')?.value;
+    costs.forEach(i => { if (!i.value && firstCost) i.value = firstCost; });
+    sells.forEach(i => { if (!i.value && firstSell) i.value = firstSell; });
+  } else if (defC === '' && defS === '') {
+    // Overwrite all from first filled row when helpers empty
+    const costs = [...document.querySelectorAll('#sizeRows [name*="[cost_price]"]')];
+    const sells = [...document.querySelectorAll('#sizeRows [name*="[selling_price]"]')];
+    const firstCost = costs.find(i => i.value !== '')?.value;
+    const firstSell = sells.find(i => i.value !== '')?.value;
+    if (firstCost) costs.forEach(i => { i.value = firstCost; });
+    if (firstSell) sells.forEach(i => { i.value = firstSell; });
+  }
+  // Same convenience for SKU empties when filling empties
+  if (!overwriteAll) applyDefaultSku(false);
 }
 document.getElementById('productForm').addEventListener('submit', e => {
   const rows = [...document.querySelectorAll('#sizeRows tr')];

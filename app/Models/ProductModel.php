@@ -533,6 +533,62 @@ class ProductModel {
         return $stmt->execute($params);
     }
 
+    /**
+     * Apply cost and/or sell price across style families.
+     * @param list<int> $styleProductIds Any product id from each style (siblings resolved)
+     * @param ?string $sizeOnly When set, only update that size within each style
+     * @return array{updated:int, styles:int, matched_styles:int}
+     */
+    public function applyPricesToStyles(array $styleProductIds, ?float $cost, ?float $sell, ?string $sizeOnly = null): array {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $styleProductIds), static fn($id) => $id > 0)));
+        $sizeOnly = $sizeOnly !== null ? trim($sizeOnly) : '';
+        if (!$ids || ($cost === null && $sell === null)) {
+            return ['updated' => 0, 'styles' => 0, 'matched_styles' => 0];
+        }
+
+        $updated = 0;
+        $matchedStyles = 0;
+        foreach ($ids as $id) {
+            $siblings = $this->siblings($id, true);
+            if (!$siblings) continue;
+            $styleHit = false;
+            foreach ($siblings as $s) {
+                if ($sizeOnly !== '' && strcasecmp(trim((string)$s['size']), $sizeOnly) !== 0) {
+                    continue;
+                }
+                $sets = [];
+                $params = [];
+                if ($cost !== null) {
+                    $sets[] = 'cost_price=?';
+                    $params[] = $cost;
+                }
+                if ($sell !== null) {
+                    $sets[] = 'selling_price=?';
+                    $params[] = $sell;
+                }
+                if (!$sets) continue;
+                $params[] = (int)$s['id'];
+                $this->db->prepare('UPDATE products SET '.implode(', ', $sets).' WHERE id=? AND is_active=1')
+                    ->execute($params);
+                $updated++;
+                $styleHit = true;
+            }
+            if ($styleHit) $matchedStyles++;
+        }
+
+        return [
+            'updated' => $updated,
+            'styles' => count($ids),
+            'matched_styles' => $matchedStyles,
+        ];
+    }
+
+    /** Apply cost/sell to every size in the same style as $productId. */
+    public function applyPricesToFamily(int $productId, ?float $cost, ?float $sell): int {
+        $r = $this->applyPricesToStyles([$productId], $cost, $sell, null);
+        return $r['updated'];
+    }
+
     public function deductStock(int $id, int $qty): void {
         $this->db->prepare("UPDATE products SET quantity = quantity - ? WHERE id = ?")->execute([$qty,$id]);
         $this->checkLowStock($id);
