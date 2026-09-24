@@ -1,46 +1,111 @@
-/* Compact premium overrides — loads after app.css */
-.stats-grid{gap:.75rem;margin-bottom:1.1rem}
-.stat-card{padding:.9rem 1rem;box-shadow:var(--shadow);transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
-.stat-card:hover{transform:translateY(-1px);box-shadow:var(--shadow-lg)}
-.stat-value{font-size:1.55rem;margin:.1rem 0;line-height:1.1}
-.stat-label{font-size:.68rem;margin-bottom:.25rem}
-.stat-sub{font-size:.72rem}
+/* Comfortable compact layer — airy enough to breathe, still premium */
 
-.card{box-shadow:var(--shadow)}
-.card-header{padding:.7rem 1rem;gap:.55rem}
-.card-header h3{font-size:.95rem}
-.card-body{padding:1rem}
+/* Density (uses --space-* / --card-* / --cell-* from app.css) */
+.stats-grid{gap:var(--space-3);margin-bottom:var(--space-4)}
+.stat-card{
+  padding:var(--space-3) var(--card-pad);box-shadow:none;
+  border-color:rgba(10,42,34,.08);
+  transition:border-color .2s var(--ease), transform .2s var(--ease);
+}
+.stat-card:hover{transform:translateY(-1px);border-color:rgba(196,92,42,.35);box-shadow:var(--shadow)}
+.stat-value{font-size:1.5rem;margin:.15rem 0;line-height:1.1;letter-spacing:-.03em;font-weight:700}
+.stat-label{font-size:.66rem;margin-bottom:.28rem;letter-spacing:.08em}
+.stat-sub{font-size:.72rem;margin-top:.15rem}
 
-thead th{padding:.55rem .85rem;font-size:.66rem;border-bottom:1px solid var(--border);background:var(--bg3)}
-tbody td{padding:.55rem .85rem;font-size:.84rem}
+.card{box-shadow:none;border-color:rgba(10,42,34,.08)}
+.card-header{padding:var(--card-head-pad);gap:var(--space-2);background:rgba(255,252,247,.6)}
+.card-header h3{font-size:.95rem;letter-spacing:-.02em;font-weight:600}
+.card-body{padding:var(--card-pad)}
 
-.btn{padding:.45rem .85rem;font-size:.84rem;gap:.35rem}
-.btn-sm{padding:.3rem .65rem;font-size:.78rem}
-.btn-xs{padding:.18rem .48rem;font-size:.7rem}
-.btn-ghost{border-width:1px}
+thead th{
+  padding:var(--cell-pad-y) var(--cell-pad-x);font-size:.64rem;letter-spacing:.07em;
+  border-bottom:1px solid var(--border);background:var(--bg3);font-weight:600;
+}
+tbody td{padding:var(--cell-pad-y) var(--cell-pad-x);font-size:.84rem}
+tbody tr:hover{background:rgba(10,42,34,.03)}
 
-.alert{padding:.65rem .85rem;margin-bottom:.85rem;font-size:.84rem;border-left-width:3px}
+.btn{border-radius:8px}
+.btn-ghost{background:transparent}
+.btn-primary{box-shadow:0 1px 0 rgba(255,255,255,.12) inset}
 
-.form-group{margin-bottom:.85rem}
-label{font-size:.74rem;margin-bottom:.3rem}
-input,select,textarea{padding:.5rem .75rem;font-size:.88rem;border-width:1px}
-.form-row,.form-row-3{gap:.75rem}
+.alert{padding:var(--space-2) var(--space-3);margin-bottom:var(--space-3);font-size:.82rem;border-left-width:3px;border-radius:8px}
 
-.progress-wrap{height:6px}
+.form-group{margin-bottom:var(--space-3)}
+label{font-size:.7rem;margin-bottom:.3rem;letter-spacing:.06em}
+input,select,textarea{
+  padding:.5rem .75rem;font-size:.86rem;border-radius:8px;
+  border-color:rgba(10,42,34,.12);background:var(--bg2);
+}
+input:focus,select:focus,textarea:focus{
+  border-color:rgba(196,92,42,.55);
+  box-shadow:0 0 0 3px rgba(196,92,42,.1);
+  background:#fff;
+}
+.form-row,.form-row-3{gap:var(--space-3)}
+
+.progress-wrap{height:6px;border-radius:999px;overflow:hidden}
 .progress-bar{transition:width .55s var(--ease)}
 
-.chart-box{padding:1rem;box-shadow:var(--shadow)}
-.alert-bar{padding:.6rem .85rem;margin-bottom:.9rem;font-size:.88rem;gap:.65rem}
+.chart-box{padding:var(--card-pad);box-shadow:none;border:1px solid rgba(10,42,34,.08);border-radius:var(--radius)}
+.alert-bar{padding:var(--space-2) var(--space-3);margin-bottom:var(--space-3);font-size:.84rem;gap:var(--space-2);border-radius:8px}
 .alert-bar .ab-count{font-size:1rem}
 
-.dash-grid-2{gap:.9rem;margin-bottom:.9rem}
-.dash-grid-chart{gap:.9rem}
-.dash-target-block{margin-bottom:.85rem}
-.dash-target-name{font-size:.82rem}
-.dash-chart-title{font-size:.95rem}
-.dash-recent-list{max-height:260px}
-.dash-recent-item{padding:.55rem .9rem;gap:.65rem}
-.dash-recent-ref{font-size:.76rem}
-.dash-recent-total{font-size:.84rem}
+.dash-grid-2{gap:var(--section-gap);margin-bottom:var(--section-gap)}
+.dash-grid-chart{gap:var(--section-gap)}
+.dash-target-block{margin-bottom:var(--space-3)}
+.dash-target-name{font-size:.8rem}
+.dash-chart-title{font-size:.95rem;letter-spacing:-.02em}
+.dash-recent-list{max-height:280px}
+.dash-recent-item{padding:var(--space-2) var(--space-3);gap:var(--space-2)}
+.dash-recent-ref{font-size:.74rem}
+.dash-recent-total{font-size:.84rem;font-weight:600;letter-spacing:-.01em}
 
-.badge{padding:.18rem .5rem;font-size:.66rem}
+.badge{padding:.16rem .45rem;font-size:.62rem;font-weight:600;letter-spacing:.03em;border-radius:5px}
+
+/* Page chrome */
+.page-enter > *{animation:page-rise .4s var(--ease) both}
+@keyframes page-rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* Products */
+.products-toolbar{gap:var(--space-2);margin-bottom:var(--space-3)}
+.products-filters{gap:var(--space-2)}
+.products-stats{gap:var(--space-2);margin-bottom:var(--space-3)}
+.products-stat{
+  padding:var(--space-2) var(--space-3);font-size:.8rem;border-radius:8px;
+  box-shadow:none;border-color:rgba(10,42,34,.08);
+}
+.products-name-cell{font-size:.84rem;letter-spacing:-.01em}
+.products-card-header{gap:var(--space-2) var(--space-3)}
+.products-pager{padding:var(--space-2) var(--space-3)}
+.products-table thead th,.products-table tbody td{padding:var(--cell-pad-y) var(--cell-pad-x)}
+
+.apply-prices-box{
+  padding:var(--space-2) var(--space-3);margin-bottom:var(--space-3);border-radius:8px;
+  background:rgba(212,160,23,.06);border-color:rgba(212,160,23,.28);
+}
+
+.bulk-price-modal{border-radius:12px;box-shadow:var(--shadow-lg)}
+.bulk-price-head{padding:var(--space-3) var(--space-4)}
+.bulk-price-head h3{font-size:1rem;letter-spacing:-.02em}
+.bulk-price-lead{font-size:.82rem;padding:var(--space-2) var(--space-4) 0}
+.bulk-price-grid{gap:var(--space-3);padding:var(--space-3) var(--space-4)}
+.bulk-include-list{max-height:280px;border-radius:8px}
+.bulk-include-item{padding:var(--space-2);border-radius:6px}
+.bulk-include-name{font-size:.82rem}
+.bulk-price-summary{margin:0 var(--space-4) var(--space-3);padding:var(--space-2) var(--space-3);font-size:.82rem}
+.bulk-price-actions{padding:var(--space-3) var(--space-4);gap:var(--space-2)}
+
+.modal-box{border-radius:12px;padding:var(--space-4);border:1px solid rgba(10,42,34,.08)}
+.modal-overlay{background:rgba(7,31,25,.45);backdrop-filter:blur(2px)}
+
+.btn-primary{box-shadow:0 1px 0 rgba(255,255,255,.12) inset}
+.nav-label{color:rgba(212,160,23,.55)}
+
+/* Optional denser mode — add class="ui-dense" on <html> if needed later */
+html.ui-dense{
+  --space-1:.3rem;--space-2:.45rem;--space-3:.65rem;--space-4:.85rem;--space-5:1.05rem;
+  --page-pad-x:.9rem;--page-pad-y:.75rem;
+  --card-pad:.8rem;--card-head-pad:.5rem .8rem;
+  --cell-pad-y:.38rem;--cell-pad-x:.65rem;
+  --section-gap:.7rem;
+}

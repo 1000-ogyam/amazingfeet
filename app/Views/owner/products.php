@@ -27,6 +27,21 @@ ksort($sizeHints, SORT_NATURAL);
 
 ob_start();
 ?>
+<div class="products-stats">
+  <div class="products-stat">
+    <div class="text-muted">Products</div><div class="font-bold"><?= $styleCount ?></div>
+  </div>
+  <div class="products-stat">
+    <div class="text-muted">Size variants</div><div class="font-bold"><?= (int)($variantCount ?? 0) ?></div>
+  </div>
+  <div class="products-stat">
+    <div class="text-muted">Retail Value</div><div class="font-bold text-accent"><?= money($stockValue['retail_value']??0) ?></div>
+  </div>
+  <div class="products-stat">
+    <div class="text-muted">Cost Value</div><div class="font-bold"><?= money($stockValue['cost_value']??0) ?></div>
+  </div>
+</div>
+
 <div class="products-toolbar">
   <form method="GET" class="products-filters" id="productsFilterForm">
     <input type="hidden" name="per_page" value="<?= (int)$perPage ?>">
@@ -52,21 +67,6 @@ ob_start();
     </div>
   </form>
   <a href="<?= BASE_PATH ?>/products/create" class="btn btn-primary products-add-btn"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add Product</a>
-</div>
-
-<div class="products-stats">
-  <div class="products-stat">
-    <div class="text-muted">Products</div><div class="font-bold"><?= $styleCount ?></div>
-  </div>
-  <div class="products-stat">
-    <div class="text-muted">Size variants</div><div class="font-bold"><?= (int)($variantCount ?? 0) ?></div>
-  </div>
-  <div class="products-stat">
-    <div class="text-muted">Retail Value</div><div class="font-bold text-accent"><?= money($stockValue['retail_value']??0) ?></div>
-  </div>
-  <div class="products-stat">
-    <div class="text-muted">Cost Value</div><div class="font-bold"><?= money($stockValue['cost_value']??0) ?></div>
-  </div>
 </div>
 
 <form method="POST" action="<?= BASE_PATH ?>/products/bulk-prices" id="productsBulkForm">
@@ -157,6 +157,11 @@ ob_start();
             </td>
             <td class="products-actions">
               <a href="<?= BASE_PATH ?>/products/<?= (int)$p['id'] ?>/edit" class="btn btn-ghost btn-xs"><i class="fa-solid fa-pen" aria-hidden="true"></i> Edit</a>
+              <button type="submit" formaction="<?= BASE_PATH ?>/products/<?= (int)$p['id'] ?>/duplicate" formmethod="POST"
+                      class="btn btn-ghost btn-xs" title="Duplicate this product and all sizes"
+                      onclick="return confirm('Duplicate “<?= e($p['name']) ?>” with all <?= $sizeCount ?> size<?= $sizeCount===1?'':'s' ?>? Stock on the copy will start at 0.')">
+                <i class="fa-solid fa-copy" aria-hidden="true"></i>
+              </button>
               <button type="submit" formaction="<?= BASE_PATH ?>/products/<?= (int)$p['id'] ?>/delete" formmethod="POST"
                       class="btn btn-danger btn-xs" title="Delete"
                       onclick="return confirm('Remove this product and all <?= $sizeCount ?> size<?= $sizeCount===1?'':'s' ?>?')">

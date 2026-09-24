@@ -103,6 +103,101 @@ CREATE TABLE IF NOT EXISTS stock_adjustments (
     FOREIGN KEY (user_id)    REFERENCES users(id)
 );
 
+-- ─── Suppliers (reusable on purchase orders) ─────────────────
+CREATE TABLE IF NOT EXISTS suppliers (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    name       VARCHAR(150) NOT NULL,
+    phone      VARCHAR(30) NULL,
+    email      VARCHAR(120) NULL,
+    notes      TEXT NULL,
+    is_active  TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_suppliers_name (name),
+    INDEX idx_suppliers_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ─── Sale returns / exchanges ────────────────────────────────
+CREATE TABLE IF NOT EXISTS sale_returns (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    return_ref      VARCHAR(30) NOT NULL UNIQUE,
+    sale_id         INT NOT NULL,
+    processed_by    INT NOT NULL,
+    reason          VARCHAR(255) NULL,
+    refund_method   ENUM('cash','momo','card','store_credit','none') NOT NULL DEFAULT 'cash',
+    refund_amount   DECIMAL(10,2) NOT NULL DEFAULT 0,
+    exchange_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+    exchange_sale_id INT NULL,
+    notes           TEXT NULL,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sale_id) REFERENCES sales(id),
+    FOREIGN KEY (processed_by) REFERENCES users(id),
+    FOREIGN KEY (exchange_sale_id) REFERENCES sales(id) ON DELETE SET NULL,
+    INDEX idx_ret_sale (sale_id),
+    INDEX idx_ret_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS sale_return_items (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    return_id     INT NOT NULL,
+    sale_item_id  INT NOT NULL,
+    product_id    INT NOT NULL,
+    quantity      INT NOT NULL DEFAULT 1,
+    unit_price    DECIMAL(10,2) NOT NULL DEFAULT 0,
+    line_total    DECIMAL(10,2) NOT NULL DEFAULT 0,
+    FOREIGN KEY (return_id) REFERENCES sale_returns(id) ON DELETE CASCADE,
+    FOREIGN KEY (sale_item_id) REFERENCES sale_items(id),
+    FOREIGN KEY (product_id) REFERENCES products(id),
+    INDEX idx_sri_return (return_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS sale_return_exchanges (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    return_id   INT NOT NULL,
+    product_id  INT NOT NULL,
+    quantity    INT NOT NULL DEFAULT 1,
+    unit_price  DECIMAL(10,2) NOT NULL DEFAULT 0,
+    cost_price  DECIMAL(10,2) NOT NULL DEFAULT 0,
+    line_total  DECIMAL(10,2) NOT NULL DEFAULT 0,
+    FOREIGN KEY (return_id) REFERENCES sale_returns(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id),
+    INDEX idx_sre_return (return_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ─── Purchase orders (receive stock) ─────────────────────────
+CREATE TABLE IF NOT EXISTS purchase_orders (
+    id           INT AUTO_INCREMENT PRIMARY KEY,
+    po_ref       VARCHAR(30) NOT NULL UNIQUE,
+    supplier     VARCHAR(150) NULL,
+    supplier_id  INT NULL,
+    status       ENUM('draft','ordered','partial','received','cancelled') NOT NULL DEFAULT 'draft',
+    notes        TEXT NULL,
+    created_by   INT NOT NULL,
+    received_by  INT NULL,
+    ordered_at   DATETIME NULL,
+    received_at  DATETIME NULL,
+    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by)  REFERENCES users(id),
+    FOREIGN KEY (received_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL,
+    INDEX idx_po_status (status),
+    INDEX idx_po_created (created_at),
+    INDEX idx_po_supplier (supplier_id)
+);
+
+CREATE TABLE IF NOT EXISTS purchase_order_items (
+    id                  INT AUTO_INCREMENT PRIMARY KEY,
+    purchase_order_id   INT NOT NULL,
+    product_id          INT NOT NULL,
+    quantity_ordered    INT NOT NULL DEFAULT 0,
+    quantity_received   INT NOT NULL DEFAULT 0,
+    unit_cost           DECIMAL(10,2) NOT NULL DEFAULT 0,
+    FOREIGN KEY (purchase_order_id) REFERENCES purchase_orders(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id),
+    INDEX idx_poi_po (purchase_order_id),
+    INDEX idx_poi_product (product_id)
+);
+
 -- ─── Weekly targets ──────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS weekly_targets (
     id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -125,6 +220,38 @@ CREATE TABLE IF NOT EXISTS customers (
     notes      TEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ─── SMS campaigns (Arkesel) ─────────────────────────────────
+CREATE TABLE IF NOT EXISTS sms_campaigns (
+    id               INT AUTO_INCREMENT PRIMARY KEY,
+    title            VARCHAR(150) NULL,
+    message          TEXT NOT NULL,
+    audience         ENUM('all_customers','custom','mixed') NOT NULL DEFAULT 'custom',
+    recipient_count  INT NOT NULL DEFAULT 0,
+    sent_count       INT NOT NULL DEFAULT 0,
+    failed_count     INT NOT NULL DEFAULT 0,
+    status           ENUM('queued','sending','sent','partial','failed') NOT NULL DEFAULT 'queued',
+    api_response     TEXT NULL,
+    created_by       INT NOT NULL,
+    sent_at          DATETIME NULL,
+    created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(id),
+    INDEX idx_sms_camp_created (created_at),
+    INDEX idx_sms_camp_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS sms_campaign_recipients (
+    id           INT AUTO_INCREMENT PRIMARY KEY,
+    campaign_id  INT NOT NULL,
+    phone        VARCHAR(20) NOT NULL,
+    customer_id  INT NULL,
+    status       ENUM('pending','sent','failed','skipped') NOT NULL DEFAULT 'pending',
+    error_msg    VARCHAR(255) NULL,
+    FOREIGN KEY (campaign_id) REFERENCES sms_campaigns(id) ON DELETE CASCADE,
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
+    INDEX idx_sms_rec_camp (campaign_id),
+    INDEX idx_sms_rec_phone (phone)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ─── Low stock alerts log ────────────────────────────────────
 CREATE TABLE IF NOT EXISTS stock_alerts (

@@ -88,7 +88,41 @@ ob_start();
             <button type="button" class="btn btn-ghost btn-sm" onclick="applyFamilyPrices('sell')"><i class="fa-solid fa-tag" aria-hidden="true"></i> Sell → all sizes</button>
           </div>
         </div>
+        <div class="apply-prices-box">
+          <p class="text-muted text-sm" style="margin:0 0 .5rem">Apply the <strong>same SKU</strong> to every size (optional: append size, e.g. T266370-30).</p>
+          <div class="flex-center gap-1" style="flex-wrap:wrap;align-items:center">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="applyFamilySku(false)"><i class="fa-solid fa-barcode" aria-hidden="true"></i> SKU → all sizes</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="applyFamilySku(true)"><i class="fa-solid fa-link" aria-hidden="true"></i> SKU-size → all sizes</button>
+          </div>
+        </div>
         <?php else: ?>
+        <?php $styleOptions = $styleOptions ?? []; ?>
+        <div class="apply-prices-box" id="importPricesBox">
+          <p class="text-muted text-sm" style="margin:0 0 .5rem">
+            <strong>Start from an existing product</strong> — load its sizes with their cost, sell, and SKU values, then edit as needed.
+          </p>
+          <div class="form-row" style="margin:0;align-items:end">
+            <div class="form-group" style="margin-bottom:0;flex:1">
+              <label>Copy sizes &amp; prices from</label>
+              <select id="importFromStyle">
+                <option value="">— Select a product —</option>
+                <?php foreach ($styleOptions as $opt): ?>
+                <option value="<?= (int)$opt['id'] ?>">
+                  <?= e($opt['name']) ?><?= !empty($opt['design']) ? ' · '.e($opt['design']) : '' ?>
+                  (<?= e($opt['gender']) ?> · <?= (int)($opt['size_count'] ?? 1) ?> sz)
+                </option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <button type="button" class="btn btn-ghost btn-sm" id="importSizesBtn"><i class="fa-solid fa-download" aria-hidden="true"></i> Load sizes &amp; prices</button>
+            </div>
+          </div>
+          <label style="display:flex;align-items:center;gap:.4rem;margin-top:.65rem;font-weight:500;text-transform:none;letter-spacing:0;font-size:.84rem">
+            <input type="checkbox" id="importCopyIdentity" style="width:auto" checked>
+            Also copy category, gender, and design into this form
+          </label>
+        </div>
         <div class="form-group">
           <label>Sizes, SKU codes &amp; prices *</label>
           <p class="text-muted text-sm" style="margin:-.25rem 0 .65rem">Each size can have its own <strong>SKU</strong>, cost, selling price, stock, and barcode. POS groups them and shows the SKU when you pick a size.</p>
@@ -113,8 +147,12 @@ ob_start();
             <button type="button" class="btn btn-ghost btn-sm" onclick="fillSizeRange(28,40)"><i class="fa-solid fa-list-ol" aria-hidden="true"></i> Prefill 28–40</button>
             <button type="button" class="btn btn-ghost btn-sm" onclick="applyDefaultPrices(false)"><i class="fa-solid fa-copy" aria-hidden="true"></i> Apply prices to empty</button>
             <button type="button" class="btn btn-ghost btn-sm" onclick="applyDefaultPrices(true)"><i class="fa-solid fa-tags" aria-hidden="true"></i> Apply prices to all sizes</button>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="applyDefaultSku(true)"><i class="fa-solid fa-tags" aria-hidden="true"></i> Apply SKU to all sizes</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="applyDefaultSku(true)"><i class="fa-solid fa-barcode" aria-hidden="true"></i> Apply SKU to all sizes</button>
           </div>
+          <label style="display:flex;align-items:center;gap:.4rem;margin-top:.65rem;font-weight:500;text-transform:none;letter-spacing:0;font-size:.84rem">
+            <input type="checkbox" id="autoApplyPrices" style="width:auto" checked>
+            Automatically apply default / first-row prices when adding sizes
+          </label>
           <div class="form-row" style="margin-top:.85rem">
             <div class="form-group">
               <label>Default cost (optional helper)</label>
@@ -205,11 +243,18 @@ ob_start();
           <input type="hidden" name="csrf" value="<?= csrf() ?>">
           <div class="form-group">
             <label>Adjustment Type</label>
-            <select name="type">
+            <select name="type" id="adjType">
               <option value="addition">+ Addition (restock)</option>
               <option value="return">+ Return from customer</option>
               <option value="correction">Correction</option>
               <option value="damaged">− Damaged / lost</option>
+            </select>
+          </div>
+          <div class="form-group" id="adjDirectionWrap" hidden>
+            <label>Correction direction</label>
+            <select name="direction">
+              <option value="add">Add stock</option>
+              <option value="remove">Remove stock</option>
             </select>
           </div>
           <div class="form-group">
@@ -222,6 +267,15 @@ ob_start();
           </div>
           <button type="submit" class="btn btn-success w-full"><i class="fa-solid fa-check" aria-hidden="true"></i> Apply Adjustment</button>
         </form>
+        <script>
+        (function () {
+          var type = document.getElementById('adjType');
+          var wrap = document.getElementById('adjDirectionWrap');
+          function sync() { wrap.hidden = type.value !== 'correction'; }
+          type.addEventListener('change', sync);
+          sync();
+        })();
+        </script>
       </div>
     </div>
 
@@ -279,7 +333,8 @@ ob_start();
           <div class="form-row">
             <div class="form-group">
               <label>SKU</label>
-              <input type="text" name="sku" class="mono" placeholder="e.g. AF-SCH-BLK-35">
+              <input type="text" name="sku" class="mono" value="<?= e($product['sku'] ?? '') ?>" placeholder="e.g. AF-SCH-BLK-35">
+              <p class="text-muted text-sm" style="margin:.3rem 0 0">Prefilled from this size — change if needed, or use “SKU → all sizes” above.</p>
             </div>
             <div class="form-group">
               <label>Barcode</label>
@@ -347,16 +402,74 @@ function applyFamilyPrices(mode) {
   document.body.appendChild(f);
   f.submit();
 }
+
+function applyFamilySku(appendSize) {
+  const skuInput = document.querySelector('#productForm [name=sku]');
+  const sku = (skuInput?.value || '').trim();
+  if (!sku) { alert('Enter a SKU code first.'); return; }
+  const msg = appendSize
+    ? 'Apply SKU “' + sku + '-{size}” to ALL sizes of this product?'
+    : 'Apply SKU “' + sku + '” to ALL sizes of this product?';
+  if (!confirm(msg)) return;
+  const f = document.createElement('form');
+  f.method = 'POST';
+  f.action = <?= json_encode(BASE_PATH.'/products/'.(int)$product['id'].'/apply-sku') ?>;
+  const csrf = document.createElement('input');
+  csrf.type = 'hidden'; csrf.name = 'csrf'; csrf.value = <?= json_encode(csrf()) ?>;
+  f.appendChild(csrf);
+  const s = document.createElement('input');
+  s.type = 'hidden'; s.name = 'sku'; s.value = sku;
+  f.appendChild(s);
+  if (appendSize) {
+    const a = document.createElement('input');
+    a.type = 'hidden'; a.name = 'append_size'; a.value = '1';
+    f.appendChild(a);
+  }
+  document.body.appendChild(f);
+  f.submit();
+}
 <?php else: ?>
+const PRODUCT_SIZE_PRICES_BASE = <?= json_encode(BASE_PATH . '/products/') ?>;
 let sizeRowIndex = 0;
+function autoPricesOn() {
+  return !!document.getElementById('autoApplyPrices')?.checked;
+}
+function resolvedDefaults() {
+  let defC = document.getElementById('defaultCost').value;
+  let defS = document.getElementById('defaultSell').value;
+  let defSku = (document.getElementById('defaultSku').value || '').trim();
+  if (defC === '' || defS === '' || !defSku) {
+    const costs = [...document.querySelectorAll('#sizeRows [name*="[cost_price]"]')];
+    const sells = [...document.querySelectorAll('#sizeRows [name*="[selling_price]"]')];
+    const skus = [...document.querySelectorAll('#sizeRows [name*="[sku]"]')];
+    if (defC === '') defC = costs.find(i => i.value !== '')?.value || '';
+    if (defS === '') defS = sells.find(i => i.value !== '')?.value || '';
+    if (!defSku) defSku = skus.find(i => i.value.trim() !== '')?.value.trim() || '';
+  }
+  return { defC, defS, defSku };
+}
 function addSizeRow(prefill = {}) {
   const i = sizeRowIndex++;
+  const auto = autoPricesOn();
+  const defs = resolvedDefaults();
+  const appendSize = document.getElementById('skuAppendSize')?.checked;
+  const sizeVal = prefill.size ?? '';
+  let skuVal = prefill.sku ?? '';
+  let costVal = prefill.cost ?? '';
+  let sellVal = prefill.sell ?? '';
+  if (auto) {
+    if (costVal === '' && defs.defC !== '') costVal = defs.defC;
+    if (sellVal === '' && defs.defS !== '') sellVal = defs.defS;
+    if (skuVal === '' && defs.defSku) {
+      skuVal = appendSize ? buildSku(defs.defSku, sizeVal) : defs.defSku;
+    }
+  }
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td><input type="text" name="sizes[${i}][size]" required placeholder="30" value="${prefill.size ?? ''}" style="width:4.2rem"></td>
-    <td><input type="text" name="sizes[${i}][sku]" class="mono" value="${prefill.sku ?? ''}" placeholder="e.g. AF-30" style="min-width:8rem"></td>
-    <td><input type="number" name="sizes[${i}][cost_price]" step="0.01" min="0" value="${prefill.cost ?? ''}" placeholder="0.00" style="width:6rem"></td>
-    <td><input type="number" name="sizes[${i}][selling_price]" step="0.01" min="0" required value="${prefill.sell ?? ''}" placeholder="0.00" style="width:6rem"></td>
+    <td><input type="text" name="sizes[${i}][size]" required placeholder="30" value="${sizeVal}" style="width:4.2rem"></td>
+    <td><input type="text" name="sizes[${i}][sku]" class="mono" value="${skuVal}" placeholder="e.g. AF-30" style="min-width:8rem"></td>
+    <td><input type="number" name="sizes[${i}][cost_price]" step="0.01" min="0" value="${costVal}" placeholder="0.00" style="width:6rem"></td>
+    <td><input type="number" name="sizes[${i}][selling_price]" step="0.01" min="0" required value="${sellVal}" placeholder="0.00" style="width:6rem"></td>
     <td><input type="number" name="sizes[${i}][quantity]" min="0" value="${prefill.qty ?? 0}" style="width:4.5rem"></td>
     <td><input type="text" name="sizes[${i}][barcode]" class="mono" value="${prefill.barcode ?? ''}" placeholder="—" style="min-width:7rem"></td>
     <td><button type="button" class="btn btn-ghost btn-xs" onclick="this.closest('tr').remove()" title="Remove"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></td>`;
@@ -447,6 +560,66 @@ document.getElementById('productForm').addEventListener('submit', e => {
     alert('Add at least one size with a selling price.');
   }
 });
+
+['defaultCost','defaultSell','defaultSku'].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('change', () => {
+    if (autoPricesOn()) applyDefaultPrices(false);
+  });
+});
+
+document.getElementById('importSizesBtn')?.addEventListener('click', async () => {
+  const sel = document.getElementById('importFromStyle');
+  const id = sel?.value;
+  if (!id) { alert('Select a product to copy sizes and prices from.'); return; }
+  const body = document.getElementById('sizeRows');
+  if (body.children.length && !confirm('Replace current size rows with sizes and prices from the selected product?')) return;
+  try {
+    const r = await fetch(PRODUCT_SIZE_PRICES_BASE + encodeURIComponent(id) + '/size-prices', {
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin',
+    });
+    const data = await r.json();
+    if (!data.ok || !Array.isArray(data.sizes) || !data.sizes.length) {
+      alert('No sizes found on that product.');
+      return;
+    }
+    if (document.getElementById('importCopyIdentity')?.checked) {
+      const cat = document.querySelector('#productForm [name=category_id]');
+      const gender = document.querySelector('#productForm [name=gender]');
+      const design = document.querySelector('#productForm [name=design]');
+      const name = document.querySelector('#productForm [name=name]');
+      if (cat && data.category_id) cat.value = String(data.category_id);
+      if (gender && data.gender) gender.value = data.gender;
+      if (design) design.value = data.design || '';
+      if (name && !name.value.trim() && data.name) name.value = data.name + ' (new)';
+    }
+    body.innerHTML = '';
+    sizeRowIndex = 0;
+    let firstCost = '';
+    let firstSell = '';
+    let firstSku = '';
+    data.sizes.forEach(s => {
+      if (firstCost === '' && s.cost_price != null) firstCost = String(s.cost_price);
+      if (firstSell === '' && s.selling_price != null) firstSell = String(s.selling_price);
+      if (!firstSku && s.sku) firstSku = String(s.sku);
+      addSizeRow({
+        size: s.size,
+        cost: s.cost_price != null ? s.cost_price : '',
+        sell: s.selling_price != null ? s.selling_price : '',
+        sku: s.sku || '',
+        qty: 0,
+      });
+    });
+    if (firstCost !== '') document.getElementById('defaultCost').value = firstCost;
+    if (firstSell !== '') document.getElementById('defaultSell').value = firstSell;
+    if (firstSku) document.getElementById('defaultSku').value = firstSku;
+  } catch (err) {
+    alert('Could not load sizes from that product.');
+  }
+});
+
 addSizeRow();
 addSizeRow();
 addSizeRow();

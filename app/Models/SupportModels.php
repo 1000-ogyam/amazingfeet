@@ -60,6 +60,70 @@ class LocationModel {
     }
 }
 
+class SupplierModel {
+    private PDO $db;
+    public function __construct() { $this->db = getDB(); }
+
+    public function all(string $search = '', bool $activeOnly = true): array {
+        $w = [];
+        $p = [];
+        if ($activeOnly) $w[] = 'is_active=1';
+        if ($search !== '') {
+            $w[] = '(name LIKE ? OR phone LIKE ? OR email LIKE ?)';
+            $q = '%'.$search.'%';
+            array_push($p, $q, $q, $q);
+        }
+        $where = $w ? 'WHERE '.implode(' AND ', $w) : '';
+        $stmt = $this->db->prepare("SELECT * FROM suppliers {$where} ORDER BY name");
+        $stmt->execute($p);
+        return $stmt->fetchAll();
+    }
+
+    public function findById(int $id): ?array {
+        $s = $this->db->prepare('SELECT * FROM suppliers WHERE id=?');
+        $s->execute([$id]);
+        return $s->fetch() ?: null;
+    }
+
+    public function create(array $d): int {
+        $name = trim((string)($d['name'] ?? ''));
+        if ($name === '') {
+            throw new InvalidArgumentException('Supplier name is required.');
+        }
+        $this->db->prepare("
+            INSERT INTO suppliers (name, phone, email, notes) VALUES (?,?,?,?)
+        ")->execute([
+            $name,
+            trim((string)($d['phone'] ?? '')) ?: null,
+            trim((string)($d['email'] ?? '')) ?: null,
+            trim((string)($d['notes'] ?? '')) ?: null,
+        ]);
+        return (int)$this->db->lastInsertId();
+    }
+
+    public function update(int $id, array $d): bool {
+        $name = trim((string)($d['name'] ?? ''));
+        if ($name === '') return false;
+        return $this->db->prepare("
+            UPDATE suppliers SET name=?, phone=?, email=?, notes=? WHERE id=?
+        ")->execute([
+            $name,
+            trim((string)($d['phone'] ?? '')) ?: null,
+            trim((string)($d['email'] ?? '')) ?: null,
+            trim((string)($d['notes'] ?? '')) ?: null,
+            $id,
+        ]);
+    }
+
+    public function deactivate(int $id): void {
+        $this->db->prepare('UPDATE suppliers SET is_active=0 WHERE id=?')->execute([$id]);
+    }
+
+    public function count(): int {
+        return (int)$this->db->query('SELECT COUNT(*) FROM suppliers WHERE is_active=1')->fetchColumn();
+    }
+}
+
 class CustomerModel {
     private PDO $db;
     public function __construct() { $this->db = getDB(); }
@@ -82,6 +146,22 @@ class CustomerModel {
         return (int)$this->db->lastInsertId();
     }
     public function count(): int { return (int)$this->db->query("SELECT COUNT(*) FROM customers")->fetchColumn(); }
+
+    /** Customers that have a non-empty phone number (for SMS campaigns). */
+    public function withPhones(): array {
+        return $this->db->query("
+            SELECT id, name, phone FROM customers
+            WHERE phone IS NOT NULL AND TRIM(phone) <> ''
+            ORDER BY name
+        ")->fetchAll();
+    }
+
+    public function countWithPhones(): int {
+        return (int)$this->db->query("
+            SELECT COUNT(*) FROM customers
+            WHERE phone IS NOT NULL AND TRIM(phone) <> ''
+        ")->fetchColumn();
+    }
 }
 
 class TargetModel {

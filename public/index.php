@@ -115,9 +115,27 @@ $routes = [
     ['GET',  '/products/{id}/edit',       'ProductController',  'edit',             ['owner']],
     ['POST', '/products/{id}/edit',       'ProductController',  'update',           ['owner']],
     ['POST', '/products/{id}/apply-prices','ProductController', 'applyPrices',      ['owner']],
+    ['POST', '/products/{id}/apply-sku',  'ProductController',  'applySku',         ['owner']],
+    ['POST', '/products/{id}/duplicate',  'ProductController',  'duplicate',        ['owner']],
+    ['GET',  '/products/{id}/size-prices','ProductController',  'sizePrices',       ['owner']],
     ['POST', '/products/{id}/sizes',      'ProductController',  'addSize',          ['owner']],
     ['POST', '/products/{id}/delete',     'ProductController',  'delete',           ['owner']],
     ['POST', '/products/{id}/stock',      'ProductController',  'adjustStock',      ['owner']],
+
+    // ── Owner: Purchase orders / receive stock ────────────────
+    ['GET',  '/purchases',                'PurchaseController', 'index',            ['owner']],
+    ['GET',  '/purchases/create',         'PurchaseController', 'create',           ['owner']],
+    ['POST', '/purchases/create',         'PurchaseController', 'store',            ['owner']],
+    ['GET',  '/purchases/{id}',           'PurchaseController', 'show',             ['owner']],
+    ['POST', '/purchases/{id}/receive',   'PurchaseController', 'receive',          ['owner']],
+    ['POST', '/purchases/{id}/order',     'PurchaseController', 'markOrdered',      ['owner']],
+    ['POST', '/purchases/{id}/cancel',    'PurchaseController', 'cancel',           ['owner']],
+
+    // ── Owner: SMS campaigns (Arkesel) ────────────────────────
+    ['GET',  '/sms',                      'SmsCampaignController', 'index',         ['owner']],
+    ['GET',  '/sms/create',               'SmsCampaignController', 'create',        ['owner']],
+    ['POST', '/sms/create',               'SmsCampaignController', 'store',         ['owner']],
+    ['GET',  '/sms/{id}',                 'SmsCampaignController', 'show',          ['owner']],
 
     // ── Owner: Categories ─────────────────────────────────────
     ['GET',  '/categories',               'CategoryController', 'index',            ['owner']],
@@ -135,7 +153,12 @@ $routes = [
     ['GET',  '/sales/{id}/edit',          'SalesController',    'edit',             ['owner']],
     ['POST', '/sales/{id}/edit',          'SalesController',    'update',           ['owner']],
     ['POST', '/sales/{id}/delete',        'SalesController',    'delete',           ['owner']],
+    ['GET',  '/sales/{id}/return',        'SalesController',    'returnForm',       ['owner']],
+    ['POST', '/sales/{id}/return',        'SalesController',    'processReturn',    ['owner']],
     ['GET',  '/sales/{id}',               'SalesController',    'view',             ['owner']],
+    ['GET',  '/returns',                  'ReturnController',   'index',            ['owner']],
+    ['GET',  '/returns/{id}',             'ReturnController',   'show',             ['owner']],
+    ['GET',  '/stock-history',            'StockHistoryController', 'index',        ['owner']],
     ['GET',  '/reports/daily',            'ReportController',   'daily',            ['owner']],
     ['GET',  '/reports/weekly',           'ReportController',   'weekly',           ['owner']],
     ['GET',  '/reports/monthly',          'ReportController',   'monthly',          ['owner']],
@@ -161,6 +184,11 @@ $routes = [
     ['GET',  '/customers',                'CustomerController', 'index',            ['owner']],
     ['POST', '/customers/create',         'CustomerController', 'store',            ['owner']],
     ['GET',  '/customers/export',         'CustomerController', 'export',           ['owner']],
+
+    // ── Owner: Suppliers ──────────────────────────────────────
+    ['GET',  '/suppliers',                'SupplierController', 'index',            ['owner']],
+    ['POST', '/suppliers/create',         'SupplierController', 'store',            ['owner']],
+    ['POST', '/suppliers/{id}/delete',    'SupplierController', 'delete',           ['owner']],
 
     // ── Alerts (JSON) ─────────────────────────────────────────
     ['GET',  '/api/alerts',               'ApiController',      'alerts',           ['login']],

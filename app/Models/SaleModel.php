@@ -7,8 +7,9 @@ class SaleModel {
         return 'AF-'.date('Ymd').'-'.strtoupper(substr(uniqid(), -5));
     }
 
-    public function create(array $sale, array $items): int {
-        $this->db->beginTransaction();
+    /** @param bool $useTransaction set false when already inside a parent transaction */
+    public function create(array $sale, array $items, bool $useTransaction = true): int {
+        if ($useTransaction) $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare("
                 INSERT INTO sales (sale_ref,staff_id,location_id,customer_id,subtotal,discount,total,
@@ -35,10 +36,10 @@ class SaleModel {
                 ]);
                 $pm->deductStock($item['product_id'], $item['quantity']);
             }
-            $this->db->commit();
+            if ($useTransaction) $this->db->commit();
             return $saleId;
         } catch (Exception $e) {
-            $this->db->rollBack();
+            if ($useTransaction) $this->db->rollBack();
             throw $e;
         }
     }
@@ -58,8 +59,9 @@ class SaleModel {
     }
 
     public function getItems(int $saleId): array {
+        $skuSelect = $this->productsHaveSku() ? 'p.sku' : 'NULL AS sku';
         $stmt = $this->db->prepare("
-            SELECT si.*, p.name, p.gender, p.design, p.size, p.sku, p.barcode, c.name AS category_name
+            SELECT si.*, p.name, p.gender, p.design, p.size, {$skuSelect}, p.barcode, c.name AS category_name
             FROM sale_items si
             JOIN products p ON si.product_id=p.id
             JOIN categories c ON p.category_id=c.id
@@ -67,6 +69,18 @@ class SaleModel {
         ");
         $stmt->execute([$saleId]);
         return $stmt->fetchAll();
+    }
+
+    private function productsHaveSku(): bool {
+        static $has = null;
+        if ($has !== null) return $has;
+        try {
+            $this->db->query('SELECT sku FROM products LIMIT 1');
+            $has = true;
+        } catch (Throwable $e) {
+            $has = false;
+        }
+        return $has;
     }
 
     public function all(array $f = []): array {

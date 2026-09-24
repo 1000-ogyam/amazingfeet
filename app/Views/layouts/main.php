@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title><?= e($pageTitle ?? 'Amazing Feet') ?> · <?= APP_NAME ?></title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= asset('assets/css/app.css') ?>">
   <link rel="stylesheet" href="<?= asset('assets/css/app-compact.css') ?>">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
@@ -55,6 +58,10 @@
           <span class="ni"><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i></span>
           <span class="nav-text">All Sales</span>
         </a>
+        <a href="<?= BASE_PATH ?>/returns" class="nav-item <?= str_contains($cp??'','/returns')?'active':'' ?>" title="Returns">
+          <span class="ni"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i></span>
+          <span class="nav-text">Returns</span>
+        </a>
       </div>
       <div class="nav-group">
         <span class="nav-label">Inventory</span>
@@ -62,6 +69,14 @@
           <span class="ni"><i class="fa-solid fa-box" aria-hidden="true"></i></span>
           <span class="nav-text">Products</span>
           <?php if (($alertCount??0) > 0): ?><span class="nav-badge"><?= $alertCount ?></span><?php endif; ?>
+        </a>
+        <a href="<?= BASE_PATH ?>/purchases" class="nav-item <?= str_contains($cp??'','/purchases')?'active':'' ?>" title="Purchase orders">
+          <span class="ni"><i class="fa-solid fa-truck-ramp-box" aria-hidden="true"></i></span>
+          <span class="nav-text">Purchases</span>
+        </a>
+        <a href="<?= BASE_PATH ?>/stock-history" class="nav-item <?= str_contains($cp??'','/stock-history')?'active':'' ?>" title="Stock history">
+          <span class="ni"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i></span>
+          <span class="nav-text">Stock History</span>
         </a>
         <a href="<?= BASE_PATH ?>/categories" class="nav-item <?= str_contains($cp??'','/categories')?'active':'' ?>" title="Categories">
           <span class="ni"><i class="fa-solid fa-tag" aria-hidden="true"></i></span>
@@ -108,6 +123,14 @@
         <a href="<?= BASE_PATH ?>/customers" class="nav-item <?= str_contains($cp??'','/customers')?'active':'' ?>" title="Customers">
           <span class="ni"><i class="fa-solid fa-address-book" aria-hidden="true"></i></span>
           <span class="nav-text">Customers</span>
+        </a>
+        <a href="<?= BASE_PATH ?>/suppliers" class="nav-item <?= str_contains($cp??'','/suppliers')?'active':'' ?>" title="Suppliers">
+          <span class="ni"><i class="fa-solid fa-truck" aria-hidden="true"></i></span>
+          <span class="nav-text">Suppliers</span>
+        </a>
+        <a href="<?= BASE_PATH ?>/sms" class="nav-item <?= str_contains($cp??'','/sms')?'active':'' ?>" title="SMS Campaigns">
+          <span class="ni"><i class="fa-solid fa-comment-sms" aria-hidden="true"></i></span>
+          <span class="nav-text">SMS Campaigns</span>
         </a>
         <a href="<?= BASE_PATH ?>/locations" class="nav-item <?= ($cp??'')==='/locations' || str_starts_with($cp??'','/locations/')?'active':'' ?>" title="Locations">
           <span class="ni"><i class="fa-solid fa-store" aria-hidden="true"></i></span>

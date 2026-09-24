@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>POS Terminal — Amazing Feet</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= asset('assets/css/app.css') ?>">
   <link rel="stylesheet" href="<?= asset('assets/css/app-compact.css') ?>">
   <link rel="stylesheet" href="<?= asset('assets/css/pos.css') ?>">
@@ -43,15 +46,20 @@
       </div>
     </div>
 
-    <div class="pos-filters">
-      <button type="button" class="btn btn-sm btn-ghost cat-filter active" data-cat="" onclick="filterCat(this,'')">All</button>
-      <?php foreach ($categories as $c): ?>
-      <button type="button" class="btn btn-sm btn-ghost cat-filter" data-cat="<?= $c['id'] ?>" onclick="filterCat(this,'<?= $c['id'] ?>')"><?= e($c['name']) ?></button>
-      <?php endforeach; ?>
+    <div class="pos-filters" id="posFilters" role="toolbar" aria-label="Product filters">
+      <div class="pos-filter-group" role="group" aria-label="Category">
+        <button type="button" class="btn btn-sm btn-ghost cat-filter active" data-cat="" aria-pressed="true">All</button>
+        <?php foreach ($categories as $c): ?>
+        <button type="button" class="btn btn-sm btn-ghost cat-filter" data-cat="<?= (int)$c['id'] ?>" aria-pressed="false"><?= e($c['name']) ?></button>
+        <?php endforeach; ?>
+      </div>
       <span class="pos-filter-sep" aria-hidden="true"></span>
-      <?php foreach (['Boys','Girls','Unisex','Ladies'] as $g): ?>
-      <button type="button" class="btn btn-sm btn-ghost gender-filter" data-gender="<?= $g ?>" onclick="filterGender(this,'<?= $g ?>')"><?= $g ?></button>
-      <?php endforeach; ?>
+      <div class="pos-filter-group" role="group" aria-label="Gender">
+        <button type="button" class="btn btn-sm btn-ghost gender-filter active" data-gender="" aria-pressed="true">All genders</button>
+        <?php foreach (['Boys','Girls','Unisex','Ladies'] as $g): ?>
+        <button type="button" class="btn btn-sm btn-ghost gender-filter" data-gender="<?= e($g) ?>" aria-pressed="false"><?= $g ?></button>
+        <?php endforeach; ?>
+      </div>
     </div>
 
     <div id="barcodeWrap" class="pos-barcode-wrap" hidden>
@@ -232,6 +240,7 @@ let activeGender = '';
 let barcodeMode = false;
 let posPage = 1;
 let searchTimer;
+let posLoadSeq = 0;
 let viewMode = localStorage.getItem('af_pos_view') || 'grid';
 
 setInterval(() => {
@@ -254,27 +263,61 @@ function scheduleProductSearch() {
   clearTimeout(searchTimer);
   posPage = 1;
   const q = document.getElementById('searchInput').value.trim();
-  searchTimer = setTimeout(() => loadPosProducts(), q ? 250 : 0);
+  searchTimer = setTimeout(() => loadPosProducts(1), q ? 250 : 40);
+}
+
+function syncFilterButtons() {
+  document.querySelectorAll('.cat-filter').forEach(b => {
+    const on = String(b.dataset.cat || '') === String(activeCategory || '');
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  document.querySelectorAll('.gender-filter').forEach(b => {
+    const on = String(b.dataset.gender || '') === String(activeGender || '');
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+
+function filterLabel() {
+  const parts = [];
+  const catBtn = document.querySelector('.cat-filter.active');
+  const genBtn = document.querySelector('.gender-filter.active');
+  if (activeCategory && catBtn) parts.push(catBtn.textContent.trim());
+  if (activeGender && genBtn) parts.push(genBtn.textContent.trim());
+  return parts.join(' · ');
 }
 
 async function loadPosProducts(forcedPage) {
+  clearTimeout(searchTimer);
   if (forcedPage != null) posPage = forcedPage;
   const q = document.getElementById('searchInput').value.trim();
-  const params = new URLSearchParams({ q, page: String(posPage), per_page: String(POS_PER_PAGE) });
-  if (activeCategory) params.set('category_id', activeCategory);
-  if (activeGender) params.set('gender', activeGender);
+  const params = new URLSearchParams({
+    q,
+    page: String(posPage),
+    per_page: String(POS_PER_PAGE),
+  });
+  if (activeCategory !== '' && activeCategory != null) params.set('category_id', String(activeCategory));
+  if (activeGender !== '' && activeGender != null) params.set('gender', String(activeGender));
 
   const grid = document.getElementById('productGrid');
+  const seq = ++posLoadSeq;
   grid.innerHTML = '<div class="pos-empty">Loading…</div>';
 
   try {
-    const r = await fetch(BASE + '/pos/product/search?' + params.toString());
+    const r = await fetch(BASE + '/pos/product/search?' + params.toString(), {
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin',
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
+    if (seq !== posLoadSeq) return; // stale response
     const products = Array.isArray(data.items) ? data.items : [];
     posPage = data.page || posPage;
     renderProductGrid(products);
     renderPagination(data.total ?? 0, data.totalPages ?? 1, data.page ?? posPage);
   } catch (e) {
+    if (seq !== posLoadSeq) return;
     grid.innerHTML = '<div class="pos-empty pos-empty--error">Could not load products.</div>';
     document.getElementById('posPagination').innerHTML = '';
   }
@@ -318,7 +361,16 @@ function renderProductGrid(products) {
   grid.classList.toggle('product-grid--list', viewMode === 'list');
 
   if (!products.length) {
-    grid.innerHTML = '<div class="pos-empty">No products found. Try another search or category.</div>';
+    const label = filterLabel();
+    const q = document.getElementById('searchInput').value.trim();
+    let msg = 'No products found.';
+    if (label || q) {
+      msg = 'No products match';
+      if (label) msg += ' “' + label + '”';
+      if (q) msg += (label ? ' and' : '') + ' search “' + q + '”';
+      msg += '. Try another filter or clear search.';
+    }
+    grid.innerHTML = '<div class="pos-empty">' + msg + '</div>';
     return;
   }
 
@@ -407,18 +459,29 @@ document.getElementById('sizeModal').addEventListener('click', e => {
 });
 
 function filterCat(btn, catId) {
-  document.querySelectorAll('.cat-filter').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  activeCategory = catId;
+  activeCategory = catId == null ? '' : String(catId);
+  syncFilterButtons();
   loadPosProducts(1);
 }
 function filterGender(btn, gender) {
-  const active = btn.classList.contains('active');
-  document.querySelectorAll('.gender-filter').forEach(b => b.classList.remove('active'));
-  if (!active) { btn.classList.add('active'); activeGender = gender; }
-  else activeGender = '';
+  activeGender = gender == null ? '' : String(gender);
+  syncFilterButtons();
   loadPosProducts(1);
 }
+
+document.getElementById('posFilters').addEventListener('click', (e) => {
+  const cat = e.target.closest('.cat-filter');
+  if (cat) {
+    e.preventDefault();
+    filterCat(cat, cat.dataset.cat || '');
+    return;
+  }
+  const gen = e.target.closest('.gender-filter');
+  if (gen) {
+    e.preventDefault();
+    filterGender(gen, gen.dataset.gender || '');
+  }
+});
 
 function toggleBarcodeMode() {
   barcodeMode = !barcodeMode;
@@ -671,6 +734,7 @@ function newSale() {
 }
 
 loadPosProducts(1);
+syncFilterButtons();
 </script>
 </body>
 </html>

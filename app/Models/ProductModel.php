@@ -170,7 +170,7 @@ class ProductModel {
             $params[] = (int) $categoryId;
         }
         if ($gender !== null && $gender !== '') {
-            $w[] = 'p.gender = ?';
+            $w[] = 'LOWER(TRIM(p.gender)) = LOWER(TRIM(?))';
             $params[] = $gender;
         }
         if ($q !== null && trim($q) !== '') {
@@ -618,6 +618,91 @@ class ProductModel {
         return $r['updated'];
     }
 
+    /** Apply the same SKU (or SKU-size) to every size in the style. */
+    public function applySkuToFamily(int $productId, string $sku, bool $appendSize = false): int {
+        if (!$this->hasSkuColumn()) return 0;
+        $sku = trim($sku);
+        if ($sku === '') return 0;
+        $siblings = $this->siblings($productId, true);
+        if (!$siblings) return 0;
+        $n = 0;
+        $stmt = $this->db->prepare('UPDATE products SET sku=? WHERE id=?');
+        foreach ($siblings as $s) {
+            $value = $appendSize
+                ? $this->buildSkuWithSize($sku, (string)$s['size'])
+                : $sku;
+            $stmt->execute([$value, (int)$s['id']]);
+            $n++;
+        }
+        return $n;
+    }
+
+    private function buildSkuWithSize(string $base, string $size): string {
+        $b = trim($base);
+        $sz = trim($size);
+        if ($b === '') return '';
+        if ($sz === '') return $b;
+        $b = rtrim($b, "- \t");
+        $lower = strtolower($b);
+        $szLower = strtolower($sz);
+        if (str_ends_with($lower, '-' . $szLower) || str_ends_with($lower, $szLower)) {
+            return $b;
+        }
+        return $b . '-' . $sz;
+    }
+
+    /**
+     * Duplicate a whole style (all sizes). New name gets " (copy)" suffix.
+     * Stock starts at 0; barcodes cleared to avoid unique conflicts.
+     */
+    public function duplicateStyle(int $id): int {
+        $siblings = $this->siblings($id, true);
+        if (!$siblings) {
+            throw new InvalidArgumentException('Product not found.');
+        }
+        $base = $siblings[0];
+        $name = trim((string)$base['name']);
+        if (!preg_match('/\s*\(copy(?:\s+\d+)?\)\s*$/i', $name)) {
+            $name .= ' (copy)';
+        } else {
+            $name = preg_replace('/\s*\(copy(?:\s+\d+)?\)\s*$/i', '', $name) . ' (copy)';
+        }
+        $sizes = [];
+        foreach ($siblings as $s) {
+            $sizes[] = [
+                'size'          => $s['size'],
+                'sku'           => $s['sku'] ?? null,
+                'barcode'       => null,
+                'cost_price'    => (float)$s['cost_price'],
+                'selling_price' => (float)$s['selling_price'],
+                'quantity'      => 0,
+            ];
+        }
+        return $this->createWithSizes([
+            'category_id'         => (int)$base['category_id'],
+            'name'                => $name,
+            'gender'              => $base['gender'],
+            'design'              => $base['design'] ?? null,
+            'low_stock_threshold' => (int)($base['low_stock_threshold'] ?? LOW_STOCK_THRESHOLD),
+            'image'               => $base['image'] ?? null,
+        ], $sizes);
+    }
+
+    /** Size/price/SKU map for one style — used when creating a new product. */
+    public function sizePriceMap(int $id): array {
+        $siblings = $this->siblings($id, true);
+        $out = [];
+        foreach ($siblings as $s) {
+            $out[] = [
+                'size'          => (string)$s['size'],
+                'sku'           => $s['sku'] ?? null,
+                'cost_price'    => (float)$s['cost_price'],
+                'selling_price' => (float)$s['selling_price'],
+            ];
+        }
+        return $out;
+    }
+
     public function deductStock(int $id, int $qty): void {
         $this->db->prepare("UPDATE products SET quantity = quantity - ? WHERE id = ?")->execute([$qty,$id]);
         $this->checkLowStock($id);
@@ -648,6 +733,64 @@ class ProductModel {
         if ($qty > 0) $this->addStock($productId, abs($qty));
         else          $this->db->prepare("UPDATE products SET quantity = quantity + ? WHERE id=?")->execute([$qty,$productId]);
         $this->checkLowStock($productId);
+    }
+
+    /**
+     * Unified stock movement list (manual adjustments + PO receives + returns).
+     * @return list<array>
+     */
+    public function stockHistory(array $f = [], int $limit = 200): array {
+        $limit = max(1, min(500, $limit));
+        $w = ['1=1'];
+        $p = [];
+        if (!empty($f['product_id'])) {
+            $w[] = 'a.product_id=?';
+            $p[] = (int)$f['product_id'];
+        }
+        if (!empty($f['type'])) {
+            $w[] = 'a.type=?';
+            $p[] = $f['type'];
+        }
+        if (!empty($f['date_from'])) {
+            $w[] = 'DATE(a.created_at)>=?';
+            $p[] = $f['date_from'];
+        }
+        if (!empty($f['date_to'])) {
+            $w[] = 'DATE(a.created_at)<=?';
+            $p[] = $f['date_to'];
+        }
+        if (!empty($f['search'])) {
+            $w[] = '(a.note LIKE ? OR p.name LIKE ? OR p.design LIKE ? OR u.name LIKE ?)';
+            $q = '%'.$f['search'].'%';
+            array_push($p, $q, $q, $q, $q);
+        }
+        // Source filter: purchase receives are logged as addition with "PO … receive"
+        if (($f['source'] ?? '') === 'purchase') {
+            $w[] = "a.type='addition' AND a.note LIKE 'PO %receive%'";
+        } elseif (($f['source'] ?? '') === 'return') {
+            $w[] = "a.type='return'";
+        } elseif (($f['source'] ?? '') === 'manual') {
+            $w[] = "NOT (a.type='addition' AND a.note LIKE 'PO %receive%') AND a.type<>'return'";
+        }
+
+        $skuSelect = $this->hasSkuColumn() ? 'p.sku' : 'NULL AS sku';
+        $stmt = $this->db->prepare("
+            SELECT a.*, p.name AS product_name, p.size, p.gender, p.design, {$skuSelect},
+                   u.name AS user_name,
+                   CASE
+                     WHEN a.type='return' THEN 'return'
+                     WHEN a.type='addition' AND a.note LIKE 'PO %receive%' THEN 'purchase'
+                     ELSE 'manual'
+                   END AS source
+            FROM stock_adjustments a
+            JOIN products p ON a.product_id = p.id
+            JOIN users u ON a.user_id = u.id
+            WHERE ".implode(' AND ', $w)."
+            ORDER BY a.created_at DESC
+            LIMIT {$limit}
+        ");
+        $stmt->execute($p);
+        return $stmt->fetchAll();
     }
 
     public function softDelete(int $id): void {

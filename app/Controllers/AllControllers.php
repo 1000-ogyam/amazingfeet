@@ -61,7 +61,15 @@ class ProductController {
 
     public function create(): void {
         $categories = $this->cm->all();
-        view('owner/product_form', ['categories'=>$categories,'product'=>null,'variants'=>[],'error'=>flash('error')]);
+        $styleBundle = $this->pm->allStyles([], 1, 200);
+        $styleOptions = $styleBundle['items'] ?? [];
+        view('owner/product_form', [
+            'categories' => $categories,
+            'product' => null,
+            'variants' => [],
+            'styleOptions' => $styleOptions,
+            'error' => flash('error'),
+        ]);
     }
 
     public function store(): void {
@@ -155,6 +163,54 @@ class ProductController {
             ? "Updated prices on {$n} size".($n === 1 ? '' : 's').'.'
             : 'No sizes updated.');
         redirect('/products/'.$id.'/edit');
+    }
+
+    /** Apply the same SKU to every size of this style. */
+    public function applySku(string $id): void {
+        verifyCsrf();
+        $sku = trim((string)($_POST['sku'] ?? ''));
+        $appendSize = !empty($_POST['append_size']);
+        if ($sku === '') {
+            flash('error', 'Enter a SKU to apply to all sizes.');
+            redirect('/products/'.$id.'/edit');
+        }
+        $n = $this->pm->applySkuToFamily((int)$id, $sku, $appendSize);
+        flash('success', $n > 0
+            ? "Updated SKU on {$n} size".($n === 1 ? '' : 's').'.'
+            : 'No sizes updated (SKU column may be missing).');
+        redirect('/products/'.$id.'/edit');
+    }
+
+    /** Duplicate a product style (all sizes). */
+    public function duplicate(string $id): void {
+        verifyCsrf();
+        try {
+            $newId = $this->pm->duplicateStyle((int)$id);
+            flash('success', 'Product duplicated. Review sizes and stock, then save any changes.');
+            redirect('/products/'.$newId.'/edit');
+        } catch (Throwable $e) {
+            flash('error', $e->getMessage() ?: 'Could not duplicate product.');
+            redirect('/products');
+        }
+    }
+
+    /** JSON: size → cost/sell/sku map for importing into the create form. */
+    public function sizePrices(string $id): void {
+        header('Content-Type: application/json; charset=utf-8');
+        $product = $this->pm->findById((int)$id);
+        if (!$product) {
+            echo json_encode(['ok' => false, 'sizes' => []]);
+            exit;
+        }
+        echo json_encode([
+            'ok' => true,
+            'name' => $product['name'],
+            'category_id' => (int)$product['category_id'],
+            'gender' => $product['gender'],
+            'design' => $product['design'] ?? '',
+            'sizes' => $this->pm->sizePriceMap((int)$id),
+        ]);
+        exit;
     }
 
     /** Bulk apply prices across selected styles (all sizes or one size). */
@@ -284,7 +340,16 @@ class ProductController {
         $qty  = (int)$_POST['quantity'];
         $type = $_POST['type'] ?? 'addition';
         $note = trim($_POST['note'] ?? '');
-        if ($type !== 'addition') $qty = -abs($qty);
+        // Sign by type: addition/return add stock; damaged removes; correction uses signed qty intent
+        if (in_array($type, ['addition', 'return'], true)) {
+            $qty = abs($qty);
+        } elseif ($type === 'damaged') {
+            $qty = -abs($qty);
+        } else {
+            // correction: form sends positive units — treat as signed via optional direction
+            $dir = $_POST['direction'] ?? 'add';
+            $qty = ($dir === 'remove') ? -abs($qty) : abs($qty);
+        }
         $this->pm->adjustStock((int)$id, $qty, $type, $note, $_SESSION['user_id']);
         flash('success','Stock updated.');
         redirect('/products/'.$id.'/edit');
@@ -490,7 +555,87 @@ class SalesController {
         $sale  = $this->sm->findById((int)$id);
         if (!$sale) redirect('/sales');
         $items = $this->sm->getItems((int)$id);
-        view('owner/sale_detail', compact('sale','items'));
+        $rm = new SaleReturnModel();
+        $returnedQty = $rm->returnedQtyBySaleItem((int)$id);
+        $returns = $rm->forSale((int)$id);
+        view('owner/sale_detail', compact('sale','items','returnedQty','returns'));
+    }
+
+    public function returnForm(string $id): void {
+        $sale = $this->sm->findById((int)$id);
+        if (!$sale) redirect('/sales');
+        $items = $this->sm->getItems((int)$id);
+        $rm = new SaleReturnModel();
+        $returnedQty = $rm->returnedQtyBySaleItem((int)$id);
+        $pm = new ProductModel();
+        // Sibling sizes per line for exchange dropdowns
+        $siblings = [];
+        foreach ($items as $it) {
+            $siblings[(int)$it['product_id']] = $pm->siblings((int)$it['product_id'], true);
+        }
+        $allProducts = $pm->all([]);
+        view('owner/sale_return', [
+            'sale' => $sale,
+            'items' => $items,
+            'returnedQty' => $returnedQty,
+            'siblings' => $siblings,
+            'allProducts' => $allProducts,
+            'error' => flash('error'),
+        ]);
+    }
+
+    public function processReturn(string $id): void {
+        verifyCsrf();
+        $saleId = (int)$id;
+        if (!$this->sm->findById($saleId)) redirect('/sales');
+
+        $items = [];
+        foreach ((array)($_POST['qty'] ?? []) as $saleItemId => $qty) {
+            $items[] = ['sale_item_id' => (int)$saleItemId, 'quantity' => (int)$qty];
+        }
+        $exchanges = [];
+        // Per-line exchange product (size swap)
+        foreach ((array)($_POST['exchange_product'] ?? []) as $saleItemId => $productId) {
+            $pid = (int)$productId;
+            $qty = (int)($_POST['qty'][$saleItemId] ?? 0);
+            if ($pid > 0 && $qty > 0) {
+                $exchanges[] = ['product_id' => $pid, 'quantity' => $qty];
+            }
+        }
+        // Extra exchange rows
+        foreach ((array)($_POST['extra_exchange'] ?? []) as $row) {
+            if (!is_array($row)) continue;
+            $exchanges[] = [
+                'product_id' => (int)($row['product_id'] ?? 0),
+                'quantity'   => (int)($row['quantity'] ?? 0),
+            ];
+        }
+
+        try {
+            $rm = new SaleReturnModel();
+            $r = $rm->process([
+                'sale_id'           => $saleId,
+                'reason'            => trim($_POST['reason'] ?? ''),
+                'refund_method'     => $_POST['refund_method'] ?? 'cash',
+                'exchange_payment'  => $_POST['exchange_payment'] ?? 'cash',
+                'notes'             => trim($_POST['notes'] ?? ''),
+                'items'             => $items,
+                'exchanges'         => $exchanges,
+            ], (int)$_SESSION['user_id']);
+
+            $msg = 'Return '.$r['return_ref'].' processed. Stock restored.';
+            if ($r['refund_amount'] > 0) {
+                $msg .= ' Refund: GHS '.number_format($r['refund_amount'], 2).'.';
+            }
+            if ($r['exchange_sale_id']) {
+                $msg .= ' Exchange sale created.';
+            }
+            flash('success', $msg);
+            redirect('/returns/'.$r['id']);
+        } catch (Throwable $e) {
+            flash('error', $e->getMessage() ?: 'Could not process return.');
+            redirect('/sales/'.$saleId.'/return');
+        }
     }
 
     public function edit(string $id): void {
@@ -669,6 +814,275 @@ class ApiController {
     public function markAlertsRead(): void {
         (new ProductModel())->markAlertsRead();
         $this->json(['ok' => true]);
+    }
+}
+
+// ════════════════════════════════════════════════════════════
+//  PurchaseController — purchase orders / receive stock
+// ════════════════════════════════════════════════════════════
+class PurchaseController {
+    private PurchaseOrderModel $pom;
+    private ProductModel $pm;
+
+    public function __construct() {
+        $this->pom = new PurchaseOrderModel();
+        $this->pm = new ProductModel();
+    }
+
+    public function index(): void {
+        $filters = [
+            'status' => $_GET['status'] ?? '',
+            'search' => trim($_GET['search'] ?? ''),
+        ];
+        $orders = $this->pom->all(array_filter($filters, static fn($v) => $v !== '' && $v !== null));
+        view('owner/purchases', compact('orders', 'filters'));
+    }
+
+    public function create(): void {
+        $products = $this->pm->all([]);
+        $suppliers = (new SupplierModel())->all();
+        view('owner/purchase_form', [
+            'products' => $products,
+            'suppliers' => $suppliers,
+            'error' => flash('error'),
+        ]);
+    }
+
+    public function store(): void {
+        verifyCsrf();
+        $items = $this->parseItems($_POST['items'] ?? []);
+        $action = $_POST['action'] ?? 'draft';
+        $supplierId = (int)($_POST['supplier_id'] ?? 0);
+        $supplierName = trim($_POST['supplier'] ?? '');
+        if ($supplierId > 0 && $supplierName === '') {
+            $sup = (new SupplierModel())->findById($supplierId);
+            if ($sup) $supplierName = $sup['name'];
+        }
+        $header = [
+            'supplier'    => $supplierName,
+            'supplier_id' => $supplierId > 0 ? $supplierId : null,
+            'notes'       => trim($_POST['notes'] ?? ''),
+            'status'      => $action === 'order' ? 'ordered' : 'draft',
+        ];
+        $updateCost = !empty($_POST['update_cost']);
+
+        try {
+            if ($action === 'receive') {
+                $r = $this->pom->createAndReceive($header, $items, (int)$_SESSION['user_id'], $updateCost);
+                flash('success', "Stock received: {$r['received_units']} units on PO.");
+                redirect('/purchases/'.$r['po_id']);
+            }
+            $poId = $this->pom->create($header, $items, (int)$_SESSION['user_id']);
+            flash('success', $action === 'order'
+                ? 'Purchase order saved as ordered.'
+                : 'Purchase order saved as draft.');
+            redirect('/purchases/'.$poId);
+        } catch (Throwable $e) {
+            flash('error', $e->getMessage() ?: 'Could not save purchase order.');
+            redirect('/purchases/create');
+        }
+    }
+
+    public function show(string $id): void {
+        $order = $this->pom->findById((int)$id);
+        if (!$order) redirect('/purchases');
+        $items = $this->pom->getItems((int)$id);
+        view('owner/purchase_show', compact('order', 'items'));
+    }
+
+    public function receive(string $id): void {
+        verifyCsrf();
+        $map = [];
+        foreach ((array)($_POST['recv'] ?? []) as $itemId => $qty) {
+            $map[(int)$itemId] = (int)$qty;
+        }
+        $updateCost = !empty($_POST['update_cost']);
+        try {
+            $r = $this->pom->receive((int)$id, $map, (int)$_SESSION['user_id'], $updateCost);
+            flash('success', "Received {$r['received_units']} units ({$r['lines']} line".($r['lines']===1?'':'s')."). Status: {$r['status']}.");
+        } catch (Throwable $e) {
+            flash('error', $e->getMessage() ?: 'Could not receive stock.');
+        }
+        redirect('/purchases/'.$id);
+    }
+
+    public function markOrdered(string $id): void {
+        verifyCsrf();
+        if ($this->pom->markOrdered((int)$id)) {
+            flash('success', 'Marked as ordered.');
+        } else {
+            flash('error', 'Could not update status.');
+        }
+        redirect('/purchases/'.$id);
+    }
+
+    public function cancel(string $id): void {
+        verifyCsrf();
+        try {
+            $this->pom->cancel((int)$id);
+            flash('success', 'Purchase order cancelled.');
+        } catch (Throwable $e) {
+            flash('error', $e->getMessage() ?: 'Could not cancel.');
+        }
+        redirect('/purchases/'.$id);
+    }
+
+    /** @return list<array{product_id:int,quantity:int,unit_cost:float}> */
+    private function parseItems($raw): array {
+        if (!is_array($raw)) return [];
+        $out = [];
+        foreach ($raw as $row) {
+            if (!is_array($row)) continue;
+            $pid = (int)($row['product_id'] ?? 0);
+            $qty = (int)($row['quantity'] ?? 0);
+            if ($pid < 1 || $qty < 1) continue;
+            $out[] = [
+                'product_id' => $pid,
+                'quantity'   => $qty,
+                'unit_cost'  => (float)($row['unit_cost'] ?? 0),
+            ];
+        }
+        return $out;
+    }
+}
+
+// ════════════════════════════════════════════════════════════
+//  SmsCampaignController — bulk SMS via Arkesel
+// ════════════════════════════════════════════════════════════
+class SmsCampaignController {
+    private SmsCampaignModel $sms;
+    private CustomerModel $cm;
+
+    public function __construct() {
+        $this->sms = new SmsCampaignModel();
+        $this->cm = new CustomerModel();
+    }
+
+    public function index(): void {
+        $campaigns = $this->sms->all(50);
+        $customerPhoneCount = $this->cm->countWithPhones();
+        view('owner/sms_campaigns', compact('campaigns', 'customerPhoneCount'));
+    }
+
+    public function create(): void {
+        $customerPhoneCount = $this->cm->countWithPhones();
+        $balance = $this->sms->checkBalance();
+        view('owner/sms_campaign_form', [
+            'customerPhoneCount' => $customerPhoneCount,
+            'balance' => $balance,
+            'error' => flash('error'),
+            'old' => $_SESSION['sms_form'] ?? [],
+        ]);
+        unset($_SESSION['sms_form']);
+    }
+
+    public function store(): void {
+        verifyCsrf();
+        $form = [
+            'title'             => trim($_POST['title'] ?? ''),
+            'message'           => trim($_POST['message'] ?? ''),
+            'include_customers' => !empty($_POST['include_customers']),
+            'custom_numbers'    => trim($_POST['custom_numbers'] ?? ''),
+        ];
+        $_SESSION['sms_form'] = $form;
+
+        try {
+            $r = $this->sms->createAndSend($form, (int)$_SESSION['user_id']);
+            unset($_SESSION['sms_form']);
+            $msg = "SMS campaign sent: {$r['sent']} delivered";
+            if ($r['failed'] > 0) {
+                $msg .= ", {$r['failed']} failed";
+            }
+            $msg .= " of {$r['total']}.";
+            flash($r['failed'] > 0 && $r['sent'] === 0 ? 'error' : 'success', $msg);
+            redirect('/sms/'.$r['id']);
+        } catch (Throwable $e) {
+            flash('error', $e->getMessage() ?: 'Could not send SMS campaign.');
+            redirect('/sms/create');
+        }
+    }
+
+    public function show(string $id): void {
+        $campaign = $this->sms->findById((int)$id);
+        if (!$campaign) redirect('/sms');
+        $recipients = $this->sms->getRecipients((int)$id);
+        view('owner/sms_campaign_show', compact('campaign', 'recipients'));
+    }
+}
+
+// ════════════════════════════════════════════════════════════
+//  ReturnController — list / view processed returns
+// ════════════════════════════════════════════════════════════
+class ReturnController {
+    private SaleReturnModel $rm;
+    public function __construct() { $this->rm = new SaleReturnModel(); }
+
+    public function index(): void {
+        $filters = [
+            'date'   => $_GET['date'] ?? '',
+            'search' => trim($_GET['search'] ?? ''),
+        ];
+        $returns = $this->rm->all(array_filter($filters, static fn($v) => $v !== '' && $v !== null));
+        view('owner/returns', compact('returns', 'filters'));
+    }
+
+    public function show(string $id): void {
+        $return = $this->rm->findById((int)$id);
+        if (!$return) redirect('/returns');
+        $items = $this->rm->getItems((int)$id);
+        $exchanges = $this->rm->getExchanges((int)$id);
+        view('owner/return_show', compact('return', 'items', 'exchanges'));
+    }
+}
+
+// ════════════════════════════════════════════════════════════
+//  StockHistoryController
+// ════════════════════════════════════════════════════════════
+class StockHistoryController {
+    public function index(): void {
+        $filters = [
+            'search'     => trim($_GET['search'] ?? ''),
+            'type'       => $_GET['type'] ?? '',
+            'source'     => $_GET['source'] ?? '',
+            'date_from'  => $_GET['date_from'] ?? '',
+            'date_to'    => $_GET['date_to'] ?? '',
+            'product_id' => $_GET['product_id'] ?? '',
+        ];
+        $pm = new ProductModel();
+        $history = $pm->stockHistory(array_filter($filters, static fn($v) => $v !== '' && $v !== null));
+        view('owner/stock_history', compact('history', 'filters'));
+    }
+}
+
+// ════════════════════════════════════════════════════════════
+//  SupplierController
+// ════════════════════════════════════════════════════════════
+class SupplierController {
+    private SupplierModel $sm;
+    public function __construct() { $this->sm = new SupplierModel(); }
+
+    public function index(): void {
+        $search = trim($_GET['search'] ?? '');
+        $suppliers = $this->sm->all($search, false);
+        view('owner/suppliers', compact('suppliers', 'search'));
+    }
+
+    public function store(): void {
+        verifyCsrf();
+        try {
+            $this->sm->create($_POST);
+            flash('success', 'Supplier added.');
+        } catch (Throwable $e) {
+            flash('error', $e->getMessage() ?: 'Could not add supplier.');
+        }
+        redirect('/suppliers');
+    }
+
+    public function delete(string $id): void {
+        verifyCsrf();
+        $this->sm->deactivate((int)$id);
+        flash('success', 'Supplier deactivated.');
+        redirect('/suppliers');
     }
 }
 

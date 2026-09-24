@@ -14,10 +14,11 @@ $margin      = $sale['total']>0 ? round($grossProfit/$sale['total']*100) : 0;
         <h3><i class="fa-solid fa-receipt" aria-hidden="true"></i> <?= e($sale['sale_ref']) ?></h3>
         <span class="badge badge-<?= $sale['payment_method'] ?>"><?= strtoupper($sale['payment_method']) ?></span>
         <div class="ml-auto flex-center gap-1 no-print">
+          <a href="<?= BASE_PATH ?>/sales/<?= $sale['id'] ?>/return" class="btn btn-ghost btn-sm"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Return / Exchange</a>
           <a href="<?= BASE_PATH ?>/sales/<?= $sale['id'] ?>/edit" class="btn btn-ghost btn-sm"><i class="fa-solid fa-pen" aria-hidden="true"></i> Edit</a>
           <a href="<?= BASE_PATH ?>/pos/receipt/<?= $sale['id'] ?>" target="_blank" class="btn btn-ghost btn-sm"><i class="fa-solid fa-print" aria-hidden="true"></i> Print</a>
           <form method="POST" action="<?= BASE_PATH ?>/sales/<?= $sale['id'] ?>/delete" style="display:inline"
-                onsubmit="return confirm('Delete this sale and restore stock?')">
+                onsubmit="return confirm('Delete this sale and restore stock? Prefer Return / Exchange to keep a record.')">
             <input type="hidden" name="csrf" value="<?= csrf() ?>">
             <button type="submit" class="btn btn-danger btn-sm"><i class="fa-solid fa-trash" aria-hidden="true"></i> Delete</button>
           </form>
@@ -43,9 +44,13 @@ $margin      = $sale['total']>0 ? round($grossProfit/$sale['total']*100) : 0;
       <!-- Line items -->
       <div style="border-top:1px solid var(--border)">
         <table>
-          <thead><tr><th>Product</th><th>Size</th><th>Qty</th><th>Unit Price</th><th>Cost</th><th>Total</th></tr></thead>
+          <thead><tr><th>Product</th><th>Size</th><th>Qty</th><th>Returned</th><th>Unit Price</th><th>Cost</th><th>Total</th></tr></thead>
           <tbody>
-            <?php foreach($items as $item): ?>
+            <?php
+            $returnedQty = $returnedQty ?? [];
+            foreach ($items as $item):
+              $ret = (int)($returnedQty[(int)$item['id']] ?? 0);
+            ?>
             <tr>
               <td>
                 <div class="font-bold text-sm"><?= e($item['name']) ?></div>
@@ -53,6 +58,7 @@ $margin      = $sale['total']>0 ? round($grossProfit/$sale['total']*100) : 0;
               </td>
               <td><strong>Sz <?= e($item['size']) ?></strong></td>
               <td><?= $item['quantity'] ?></td>
+              <td><?= $ret > 0 ? '<span class="badge badge-momo">'.$ret.'</span>' : '—' ?></td>
               <td><?= money($item['unit_price']) ?></td>
               <td class="text-muted text-sm"><?= money($item['cost_price']) ?></td>
               <td class="font-bold"><?= money($item['line_total']) ?></td>
@@ -62,6 +68,28 @@ $margin      = $sale['total']>0 ? round($grossProfit/$sale['total']*100) : 0;
         </table>
       </div>
     </div>
+
+    <?php if (!empty($returns)): ?>
+    <div class="card">
+      <div class="card-header"><h3><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Returns on this sale</h3></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Ref</th><th>Refund</th><th>By</th><th>When</th><th></th></tr></thead>
+          <tbody>
+            <?php foreach ($returns as $r): ?>
+            <tr>
+              <td class="mono font-bold"><?= e($r['return_ref']) ?></td>
+              <td><?= money($r['refund_amount']) ?></td>
+              <td class="text-sm"><?= e($r['processed_by_name']) ?></td>
+              <td class="text-muted text-sm"><?= date('d M Y H:i', strtotime($r['created_at'])) ?></td>
+              <td><a href="<?= BASE_PATH ?>/returns/<?= (int)$r['id'] ?>" class="btn btn-ghost btn-sm">View</a></td>
+            </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <?php endif; ?>
   </div>
 
   <!-- Totals sidebar -->

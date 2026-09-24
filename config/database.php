@@ -14,7 +14,7 @@ $afConfig = [
     'DB_PASS'    => '',
     'DB_CHARSET' => 'utf8mb4',
 
-    // Arkesel SMS (low stock alerts + receipts)
+    // Arkesel SMS (campaigns, low stock alerts, receipts)
     'ARKESEL_API_KEY' => 'YOUR_ARKESEL_API_KEY',
     'ARKESEL_SENDER'  => 'AmazingFeet',
 
