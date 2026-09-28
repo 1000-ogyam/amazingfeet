@@ -13,27 +13,39 @@ foreach ($products as $p) {
         : 'c:'.(int)$p['category_id'].'|'.strtolower(trim($p['name'])).'|'.($p['gender']??'').'|'.strtolower(trim((string)($p['design'] ?? '')));
     if (!isset($styles[$key])) {
         $styles[$key] = [
-            'key'    => $key,
-            'name'   => $p['name'],
-            'gender' => $p['gender'] ?? '',
-            'design' => $p['design'] ?? '',
-            'label'  => $p['name']
+            'key'      => $key,
+            'name'     => $p['name'],
+            'gender'   => $p['gender'] ?? '',
+            'design'   => $p['design'] ?? '',
+            'category' => $p['category_name'] ?? '',
+            'label'    => $p['name']
                 . (!empty($p['design']) ? ' · '.$p['design'] : '')
                 . ' · '.($p['gender'] ?? ''),
-            'sizes'  => [],
+            'stock'    => 0,
+            'search'   => '',
+            'sizes'    => [],
         ];
     }
+    $styles[$key]['stock'] += (int)$p['quantity'];
+    $styles[$key]['search'] .= ' '.($p['sku'] ?? '').' '.($p['barcode'] ?? '');
     $styles[$key]['sizes'][] = [
         'id'    => (int)$p['id'],
         'size'  => (string)$p['size'],
         'sku'   => $p['sku'] ?? '',
         'cost'  => (float)$p['cost_price'],
         'stock' => (int)$p['quantity'],
+        'low'   => (int)$p['quantity'] <= (int)($p['low_stock_threshold'] ?? LOW_STOCK_THRESHOLD),
         'label' => $p['name'].' · Sz '.$p['size']
             . (!empty($p['sku']) ? ' · '.$p['sku'] : '')
             . ' · stock '.(int)$p['quantity'],
     ];
 }
+foreach ($styles as &$st) {
+    $st['search'] = mb_strtolower(implode(' ', [
+        $st['name'], $st['design'], $st['gender'], $st['category'], $st['search'],
+    ]));
+}
+unset($st);
 // Natural-sort sizes within each style
 foreach ($styles as &$st) {
     usort($st['sizes'], static function ($a, $b) {
@@ -95,22 +107,32 @@ $stylesList = array_values($styles);
       });
       </script>
 
-      <!-- Bulk: pick style → fill many sizes -->
       <div class="apply-prices-box">
         <p class="text-muted text-sm" style="margin:0 0 .65rem">
-          <strong>Bulk add by product</strong> — choose a style, enter qty for each size, then add them all at once.
+          <strong>Find products</strong> — type to search, tick one or more styles, then load their sizes to enter quantities in bulk.
         </p>
-        <div class="form-group" style="margin-bottom:.65rem">
-          <label>Product style</label>
-          <select id="poStyleSelect">
-            <option value="">— Select product style —</option>
-            <?php foreach ($stylesList as $i => $st): ?>
-            <option value="<?= (int)$i ?>"><?= e($st['label']) ?> (<?= count($st['sizes']) ?> sizes)</option>
-            <?php endforeach; ?>
-          </select>
+        <div class="po-search-bar">
+          <div class="po-search-input">
+            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+            <input type="search" id="poSearch" placeholder="Search name, design, category, SKU or barcode…" autocomplete="off">
+          </div>
+          <label class="po-low-toggle">
+            <input type="checkbox" id="poLowOnly"> Low stock only
+          </label>
         </div>
+        <div class="po-search-meta" id="poSearchMeta" hidden>
+          <span class="text-muted text-sm" id="poSearchCount"></span>
+          <span class="flex-center gap-1">
+            <button type="button" class="btn btn-ghost btn-xs" id="poSelectShown">Select shown</button>
+            <button type="button" class="btn btn-ghost btn-xs" id="poClearSel">Clear selection</button>
+          </span>
+        </div>
+        <div class="po-results" id="poResults" role="listbox" aria-multiselectable="true" hidden></div>
+        <button type="button" class="btn btn-primary btn-sm" id="poLoadSelected" disabled style="margin-top:.6rem">
+          <i class="fa-solid fa-table-list" aria-hidden="true"></i> <span>Load sizes</span>
+        </button>
 
-        <div id="poBulkPanel" hidden>
+        <div id="poBulkPanel" hidden style="margin-top:.85rem">
           <div class="flex-center gap-1" style="flex-wrap:wrap;margin-bottom:.55rem">
             <label class="text-sm" style="display:inline-flex;align-items:center;gap:.35rem;font-weight:500;text-transform:none;letter-spacing:0;margin:0">
               Same qty for all
@@ -124,7 +146,7 @@ $stylesList = array_values($styles);
             <button type="button" class="btn btn-ghost btn-xs" id="poBulkApplyCost">Apply cost</button>
             <button type="button" class="btn btn-ghost btn-xs" id="poBulkClearQty">Clear qtys</button>
           </div>
-          <div class="table-wrap" style="border:1px solid var(--border);border-radius:8px;max-height:280px;overflow:auto;margin-bottom:.65rem">
+          <div class="table-wrap" style="border:1px solid var(--border);border-radius:8px;max-height:380px;overflow:auto;margin-bottom:.65rem">
             <table id="poBulkSizeTable">
               <thead>
                 <tr>
@@ -139,42 +161,14 @@ $stylesList = array_values($styles);
               <tbody id="poBulkSizeBody"></tbody>
             </table>
           </div>
-          <button type="button" class="btn btn-primary btn-sm" id="poBulkAddBtn">
-            <i class="fa-solid fa-layer-group" aria-hidden="true"></i> Add selected sizes to order
-          </button>
+          <div class="flex-center gap-1" style="flex-wrap:wrap">
+            <button type="button" class="btn btn-primary btn-sm" id="poBulkAddBtn">
+              <i class="fa-solid fa-layer-group" aria-hidden="true"></i> Add to order
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm" id="poBulkClose">Close</button>
+          </div>
         </div>
       </div>
-
-      <!-- Single line (optional) -->
-      <details class="po-single-add" style="margin:.85rem 0">
-        <summary class="text-sm text-muted" style="cursor:pointer;font-weight:600">Or add one size at a time</summary>
-        <div class="form-row" style="margin-top:.65rem;align-items:end">
-          <div class="form-group" style="margin-bottom:0;flex:2">
-            <label>Product / size</label>
-            <select id="poProductSelect">
-              <option value="">— Select size variant —</option>
-              <?php foreach ($stylesList as $st): foreach ($st['sizes'] as $sz): ?>
-              <option value="<?= (int)$sz['id'] ?>"
-                      data-cost="<?= e((string)$sz['cost']) ?>"
-                      data-label="<?= e($sz['label']) ?>">
-                <?= e($sz['label']) ?>
-              </option>
-              <?php endforeach; endforeach; ?>
-            </select>
-          </div>
-          <div class="form-group" style="margin-bottom:0">
-            <label>Qty</label>
-            <input type="number" id="poQty" min="1" value="1" style="width:5.5rem">
-          </div>
-          <div class="form-group" style="margin-bottom:0">
-            <label>Unit cost</label>
-            <input type="number" id="poCost" step="0.01" min="0" placeholder="0.00" style="width:7rem">
-          </div>
-          <div class="form-group" style="margin-bottom:0">
-            <button type="button" class="btn btn-ghost btn-sm" id="poAddLine"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add line</button>
-          </div>
-        </div>
-      </details>
 
       <div class="table-wrap" style="border:1px solid var(--border);border-radius:8px;margin:.85rem 0 1rem;overflow-x:auto">
         <table id="poLinesTable">
@@ -217,14 +211,19 @@ $stylesList = array_values($styles);
 <script>
 (function () {
   const STYLES = <?= json_encode($stylesList, JSON_UNESCAPED_UNICODE) ?>;
+  const MAX_RESULTS = 60;
   const body = document.getElementById('poLinesBody');
   const empty = document.getElementById('poEmptyRow');
-  const sel = document.getElementById('poProductSelect');
-  const qtyIn = document.getElementById('poQty');
-  const costIn = document.getElementById('poCost');
-  const styleSel = document.getElementById('poStyleSelect');
   const bulkPanel = document.getElementById('poBulkPanel');
   const bulkBody = document.getElementById('poBulkSizeBody');
+  const searchIn = document.getElementById('poSearch');
+  const lowOnly = document.getElementById('poLowOnly');
+  const resultsEl = document.getElementById('poResults');
+  const countEl = document.getElementById('poSearchCount');
+  const metaEl = document.getElementById('poSearchMeta');
+  const loadBtn = document.getElementById('poLoadSelected');
+  const selected = new Set();
+  let shown = [];
   let idx = 0;
   const added = new Set();
 
@@ -272,33 +271,143 @@ $stylesList = array_values($styles);
     return 'added';
   }
 
-  function renderBulkSizes(style) {
+  function matches(style, terms) {
+    if (lowOnly.checked && !style.sizes.some(sz => sz.low)) return false;
+    return terms.every(t => style.search.indexOf(t) !== -1);
+  }
+
+  function renderResults() {
+    const terms = searchIn.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const active = terms.length > 0 || lowOnly.checked;
+    resultsEl.hidden = !active;
+    metaEl.hidden = !active;
+    if (!active) {
+      shown = [];
+      resultsEl.innerHTML = '';
+      updateLoadBtn();
+      return;
+    }
+    const all = [];
+    STYLES.forEach((st, i) => { if (matches(st, terms)) all.push(i); });
+    shown = all.slice(0, MAX_RESULTS);
+
+    if (!all.length) {
+      resultsEl.innerHTML = '<div class="po-results-empty">No products match “' + esc(searchIn.value.trim()) + '”.</div>';
+    } else {
+      resultsEl.innerHTML = shown.map(i => {
+        const st = STYLES[i];
+        const on = selected.has(i);
+        const lowN = st.sizes.filter(sz => sz.low).length;
+        return '<label class="po-result' + (on ? ' is-selected' : '') + '" role="option" aria-selected="' + on + '">' +
+          '<input type="checkbox" class="po-result-check" data-i="' + i + '"' + (on ? ' checked' : '') + '>' +
+          '<span class="po-result-main"><strong>' + esc(st.name) + '</strong>' +
+            (st.design ? ' <span class="text-muted">· ' + esc(st.design) + '</span>' : '') +
+            '<span class="po-result-sub">' + esc(st.gender) + (st.category ? ' · ' + esc(st.category) : '') + '</span></span>' +
+          '<span class="po-result-meta">' + st.sizes.length + ' size' + (st.sizes.length === 1 ? '' : 's') +
+            ' · stock ' + st.stock +
+            (lowN ? ' <span class="badge badge-low">' + lowN + ' low</span>' : '') + '</span>' +
+        '</label>';
+      }).join('');
+    }
+    let txt = all.length + ' style' + (all.length === 1 ? '' : 's');
+    if (all.length > shown.length) txt += ' · showing first ' + shown.length + ', refine your search';
+    countEl.textContent = txt;
+    updateLoadBtn();
+  }
+
+  function updateLoadBtn() {
+    const n = selected.size;
+    loadBtn.disabled = n === 0;
+    loadBtn.querySelector('span').textContent = n
+      ? 'Load sizes for ' + n + ' style' + (n === 1 ? '' : 's')
+      : 'Load sizes';
+  }
+
+  function renderBulkSizes(styleIdxs) {
     bulkBody.innerHTML = '';
-    (style.sizes || []).forEach(sz => {
-      const tr = document.createElement('tr');
-      tr.innerHTML =
-        '<td><input type="checkbox" class="po-bulk-check" checked style="width:auto" data-id="' + sz.id + '"></td>' +
-        '<td><strong>Sz ' + esc(sz.size) + '</strong></td>' +
-        '<td class="mono text-sm">' + esc(sz.sku || '—') + '</td>' +
-        '<td class="text-sm">' + sz.stock + '</td>' +
-        '<td><input type="number" class="po-bulk-qty" min="0" value="0" style="width:4.5rem" data-id="' + sz.id + '" data-label="' + esc(sz.label) + '"></td>' +
-        '<td><input type="number" class="po-bulk-cost" step="0.01" min="0" value="' + esc(String(sz.cost)) + '" style="width:6.5rem" data-id="' + sz.id + '"></td>';
-      bulkBody.appendChild(tr);
+    styleIdxs.forEach(i => {
+      const style = STYLES[i];
+      if (!style) return;
+      const head = document.createElement('tr');
+      head.className = 'po-bulk-group';
+      head.innerHTML = '<td colspan="6"><strong>' + esc(style.label) + '</strong>' +
+        ' <button type="button" class="btn btn-ghost btn-xs po-bulk-drop" data-i="' + i + '" title="Remove style">&times;</button></td>';
+      bulkBody.appendChild(head);
+      style.sizes.forEach(sz => {
+        const tr = document.createElement('tr');
+        tr.className = 'po-bulk-row';
+        tr.dataset.style = i;
+        tr.innerHTML =
+          '<td><input type="checkbox" class="po-bulk-check" checked style="width:auto" data-id="' + sz.id + '"></td>' +
+          '<td><strong>Sz ' + esc(sz.size) + '</strong></td>' +
+          '<td class="mono text-sm">' + esc(sz.sku || '—') + '</td>' +
+          '<td class="text-sm">' + (sz.low ? '<span class="badge badge-low">' + sz.stock + '</span>' : sz.stock) + '</td>' +
+          '<td><input type="number" class="po-bulk-qty" min="0" value="0" style="width:4.5rem" data-id="' + sz.id + '" data-label="' + esc(sz.label) + '"></td>' +
+          '<td><input type="number" class="po-bulk-cost" step="0.01" min="0" value="' + esc(String(sz.cost)) + '" style="width:6.5rem" data-id="' + sz.id + '"></td>';
+        bulkBody.appendChild(tr);
+      });
     });
     document.getElementById('poBulkCheckAll').checked = true;
   }
 
-  styleSel.addEventListener('change', () => {
-    const i = styleSel.value;
-    if (i === '') {
-      bulkPanel.hidden = true;
-      bulkBody.innerHTML = '';
-      return;
-    }
-    const style = STYLES[parseInt(i, 10)];
-    if (!style) return;
-    renderBulkSizes(style);
+  function loadSelected() {
+    if (!selected.size) return;
+    const idxs = STYLES.map((_, i) => i).filter(i => selected.has(i));
+    renderBulkSizes(idxs);
     bulkPanel.hidden = false;
+    bulkBody.querySelector('.po-bulk-qty')?.focus();
+  }
+
+  searchIn.addEventListener('input', renderResults);
+  lowOnly.addEventListener('change', renderResults);
+  searchIn.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    if (shown.length === 1) selected.add(shown[0]);
+    if (selected.size) loadSelected();
+  });
+
+  resultsEl.addEventListener('change', (e) => {
+    const cb = e.target.closest('.po-result-check');
+    if (!cb) return;
+    const i = parseInt(cb.dataset.i, 10);
+    if (cb.checked) selected.add(i); else selected.delete(i);
+    const row = cb.closest('.po-result');
+    row.classList.toggle('is-selected', cb.checked);
+    row.setAttribute('aria-selected', cb.checked);
+    updateLoadBtn();
+  });
+
+  document.getElementById('poSelectShown').addEventListener('click', () => {
+    shown.forEach(i => selected.add(i));
+    renderResults();
+  });
+  document.getElementById('poClearSel').addEventListener('click', () => {
+    selected.clear();
+    renderResults();
+  });
+  loadBtn.addEventListener('click', loadSelected);
+
+  bulkBody.addEventListener('click', (e) => {
+    const drop = e.target.closest('.po-bulk-drop');
+    if (!drop) return;
+    const i = parseInt(drop.dataset.i, 10);
+    selected.delete(i);
+    bulkBody.querySelectorAll('tr.po-bulk-row[data-style="' + i + '"]').forEach(tr => tr.remove());
+    drop.closest('tr').remove();
+    if (!bulkBody.querySelector('tr.po-bulk-row')) bulkPanel.hidden = true;
+    renderResults();
+  });
+
+  bulkBody.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !e.target.matches('input')) return;
+    e.preventDefault();
+    document.getElementById('poBulkAddBtn').click();
+  });
+
+  document.getElementById('poBulkClose').addEventListener('click', () => {
+    bulkPanel.hidden = true;
+    bulkBody.innerHTML = '';
   });
 
   document.getElementById('poBulkCheckAll').addEventListener('change', (e) => {
@@ -321,12 +430,12 @@ $stylesList = array_values($styles);
   });
 
   document.getElementById('poBulkAddBtn').addEventListener('click', () => {
-    let addedN = 0, mergedN = 0, skipped = 0;
-    bulkBody.querySelectorAll('tr').forEach(tr => {
+    let addedN = 0, mergedN = 0;
+    bulkBody.querySelectorAll('tr.po-bulk-row').forEach(tr => {
       const check = tr.querySelector('.po-bulk-check');
       const qtyEl = tr.querySelector('.po-bulk-qty');
       const costEl = tr.querySelector('.po-bulk-cost');
-      if (!check || !check.checked) { skipped++; return; }
+      if (!check || !check.checked) return;
       const qty = parseInt(qtyEl.value || '0', 10);
       if (qty < 1) return;
       const r = addLine(qtyEl.dataset.id, qtyEl.dataset.label, qty, costEl.value);
@@ -338,30 +447,19 @@ $stylesList = array_values($styles);
     }
     let msg = 'Added ' + addedN + ' size' + (addedN === 1 ? '' : 's');
     if (mergedN) msg += ', updated qty on ' + mergedN + ' existing line' + (mergedN === 1 ? '' : 's');
-    // brief non-blocking feedback
+    bulkBody.querySelectorAll('.po-bulk-qty').forEach(inp => { inp.value = '0'; });
+    selected.clear();
+    searchIn.value = '';
+    renderResults();
     const btn = document.getElementById('poBulkAddBtn');
     const prev = btn.innerHTML;
     btn.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i> ' + msg;
-    setTimeout(() => { btn.innerHTML = prev; }, 1800);
-  });
-
-  sel.addEventListener('change', () => {
-    const opt = sel.selectedOptions[0];
-    if (!opt || !opt.value) return;
-    costIn.value = opt.dataset.cost || '';
-  });
-
-  document.getElementById('poAddLine').addEventListener('click', () => {
-    const opt = sel.selectedOptions[0];
-    const pid = opt?.value;
-    if (!pid) { alert('Select a product size first.'); return; }
-    const qty = Math.max(1, parseInt(qtyIn.value || '1', 10));
-    const cost = costIn.value !== '' ? costIn.value : (opt.dataset.cost || '0');
-    const label = opt.dataset.label || opt.textContent.trim();
-    addLine(pid, label, qty, cost);
-    sel.value = '';
-    qtyIn.value = '1';
-    costIn.value = '';
+    setTimeout(() => {
+      btn.innerHTML = prev;
+      bulkPanel.hidden = true;
+      bulkBody.innerHTML = '';
+      searchIn.focus();
+    }, 1400);
   });
 
   body.addEventListener('input', (e) => {
@@ -392,6 +490,8 @@ $stylesList = array_values($styles);
       alert('Add at least one product line.');
     }
   });
+
+  renderResults();
 })();
 </script>
 <?php

@@ -548,6 +548,30 @@ canvas{max-width:100%}
   background:var(--bg3);border:1px solid var(--border);border-radius:8px;
   padding:.75rem .85rem;margin-bottom:1rem;
 }
+/* Purchase order product picker */
+.po-search-bar{display:flex;gap:.65rem;align-items:center;flex-wrap:wrap}
+.po-search-input{position:relative;flex:1;min-width:220px}
+.po-search-input i{position:absolute;left:.7rem;top:50%;transform:translateY(-50%);color:var(--muted);font-size:.85rem;pointer-events:none}
+.po-search-input input{padding-left:2.1rem;margin:0}
+.po-low-toggle{display:inline-flex;align-items:center;gap:.35rem;margin:0;font-size:.82rem;font-weight:500;text-transform:none;letter-spacing:0;white-space:nowrap}
+.po-low-toggle input{width:auto;margin:0}
+.po-search-meta{display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.5rem 0 .4rem}
+.po-search-meta[hidden],.po-results[hidden]{display:none}
+.po-results{background:var(--bg2);border:1px solid var(--border);border-radius:8px;max-height:300px;overflow-y:auto}
+.po-result{display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;margin:0;border-bottom:1px solid var(--border);cursor:pointer;font-weight:400;text-transform:none;letter-spacing:0;font-size:.86rem}
+.po-result:last-child{border-bottom:0}
+.po-result:hover{background:var(--bg)}
+.po-result.is-selected{background:color-mix(in srgb,var(--accent2) 10%,var(--bg2))}
+.po-result input{width:auto;margin:0;flex-shrink:0}
+.po-result-main{flex:1;min-width:0}
+.po-result-sub{display:block;color:var(--muted);font-size:.74rem}
+.po-result-meta{color:var(--muted);font-size:.76rem;white-space:nowrap;text-align:right}
+.po-results-empty{padding:1.1rem;text-align:center;color:var(--muted);font-size:.85rem}
+.po-bulk-group td{background:var(--bg3)}
+@media (max-width:640px){
+  .po-result{flex-wrap:wrap}
+  .po-result-meta{width:100%;text-align:left;padding-left:1.6rem}
+}
 .bulk-price-modal{max-width:min(860px,calc(100vw - 1.25rem));padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:min(92dvh,760px)}
 .bulk-price-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.85rem 1rem;border-bottom:1px solid var(--border)}
 .bulk-price-head h3{margin:0;font-size:1.05rem;display:flex;align-items:center;gap:.4rem}
