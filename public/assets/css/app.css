@@ -557,6 +557,9 @@ canvas{max-width:100%}
 .po-low-toggle input{width:auto;margin:0}
 .po-search-meta{display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.5rem 0 .4rem}
 .po-search-meta[hidden],.po-results[hidden]{display:none}
+.po-select-all{display:inline-flex;align-items:center;gap:.45rem;margin:0;padding:0 .7rem;font-size:.84rem;font-weight:600;text-transform:none;letter-spacing:0;cursor:pointer}
+.po-select-all input{width:auto;margin:0}
+.po-select-all:has(input:disabled){opacity:.5;cursor:default}
 .po-results{background:var(--bg2);border:1px solid var(--border);border-radius:8px;max-height:300px;overflow-y:auto}
 .po-result{display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;margin:0;border-bottom:1px solid var(--border);cursor:pointer;font-weight:400;text-transform:none;letter-spacing:0;font-size:.86rem}
 .po-result:last-child{border-bottom:0}

@@ -121,9 +121,12 @@ $stylesList = array_values($styles);
           </label>
         </div>
         <div class="po-search-meta" id="poSearchMeta" hidden>
-          <span class="text-muted text-sm" id="poSearchCount"></span>
+          <label class="po-select-all">
+            <input type="checkbox" id="poSelectAll">
+            <span id="poSelectAllLabel">Select all</span>
+          </label>
           <span class="flex-center gap-1">
-            <button type="button" class="btn btn-ghost btn-xs" id="poSelectShown">Select shown</button>
+            <span class="text-muted text-sm" id="poSearchCount"></span>
             <button type="button" class="btn btn-ghost btn-xs" id="poClearSel">Clear selection</button>
           </span>
         </div>
@@ -222,8 +225,11 @@ $stylesList = array_values($styles);
   const countEl = document.getElementById('poSearchCount');
   const metaEl = document.getElementById('poSearchMeta');
   const loadBtn = document.getElementById('poLoadSelected');
+  const selectAll = document.getElementById('poSelectAll');
+  const selectAllLabel = document.getElementById('poSelectAllLabel');
   const selected = new Set();
   let shown = [];
+  let matched = [];
   let idx = 0;
   const added = new Set();
 
@@ -283,12 +289,14 @@ $stylesList = array_values($styles);
     metaEl.hidden = !active;
     if (!active) {
       shown = [];
+      matched = [];
       resultsEl.innerHTML = '';
       updateLoadBtn();
       return;
     }
     const all = [];
     STYLES.forEach((st, i) => { if (matches(st, terms)) all.push(i); });
+    matched = all;
     shown = all.slice(0, MAX_RESULTS);
 
     if (!all.length) {
@@ -321,6 +329,17 @@ $stylesList = array_values($styles);
     loadBtn.querySelector('span').textContent = n
       ? 'Load sizes for ' + n + ' style' + (n === 1 ? '' : 's')
       : 'Load sizes';
+    syncSelectAll();
+  }
+
+  function syncSelectAll() {
+    const picked = matched.filter(i => selected.has(i)).length;
+    selectAll.disabled = matched.length === 0;
+    selectAll.checked = matched.length > 0 && picked === matched.length;
+    selectAll.indeterminate = picked > 0 && picked < matched.length;
+    selectAllLabel.textContent = matched.length > 1
+      ? 'Select all ' + matched.length
+      : 'Select all';
   }
 
   function renderBulkSizes(styleIdxs) {
@@ -378,8 +397,9 @@ $stylesList = array_values($styles);
     updateLoadBtn();
   });
 
-  document.getElementById('poSelectShown').addEventListener('click', () => {
-    shown.forEach(i => selected.add(i));
+  selectAll.addEventListener('change', () => {
+    if (selectAll.checked) matched.forEach(i => selected.add(i));
+    else matched.forEach(i => selected.delete(i));
     renderResults();
   });
   document.getElementById('poClearSel').addEventListener('click', () => {
