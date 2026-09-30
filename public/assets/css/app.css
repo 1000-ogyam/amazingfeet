@@ -571,6 +571,12 @@ canvas{max-width:100%}
 .po-result-meta{color:var(--muted);font-size:.76rem;white-space:nowrap;text-align:right}
 .po-results-empty{padding:1.1rem;text-align:center;color:var(--muted);font-size:.85rem}
 .po-bulk-group td{background:var(--bg3)}
+.po-lines-apply{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.85rem 0 -.35rem;padding:.55rem .75rem;background:var(--bg3);border:1px solid var(--border);border-radius:8px}
+.po-lines-apply[hidden]{display:none}
+.po-lines-apply-title{font-weight:600;font-size:.84rem;margin-right:.25rem}
+.po-lines-apply label{display:inline-flex;align-items:center;gap:.35rem;margin:0;font-size:.82rem;font-weight:500;text-transform:none;letter-spacing:0}
+.po-lines-apply input{width:6rem;margin:0}
+#poLinesFoot th{background:var(--bg3);text-align:left;text-transform:none;letter-spacing:0;font-size:.84rem}
 @media (max-width:640px){
   .po-result{flex-wrap:wrap}
   .po-result-meta{width:100%;text-align:left;padding-left:1.6rem}

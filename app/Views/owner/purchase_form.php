@@ -173,6 +173,21 @@ $stylesList = array_values($styles);
         </div>
       </div>
 
+      <div class="po-lines-apply" id="poLinesApply" hidden>
+        <span class="po-lines-apply-title">Apply to all lines</span>
+        <label>
+          Qty
+          <input type="number" id="poAllQty" min="1" placeholder="e.g. 6">
+        </label>
+        <button type="button" class="btn btn-ghost btn-xs" id="poAllQtyBtn">Apply qty</button>
+        <label>
+          Unit cost
+          <input type="number" id="poAllCost" step="0.01" min="0" placeholder="0.00">
+        </label>
+        <button type="button" class="btn btn-ghost btn-xs" id="poAllCostBtn">Apply cost</button>
+        <button type="button" class="btn btn-primary btn-xs" id="poAllBothBtn">Apply both</button>
+      </div>
+
       <div class="table-wrap" style="border:1px solid var(--border);border-radius:8px;margin:.85rem 0 1rem;overflow-x:auto">
         <table id="poLinesTable">
           <thead>
@@ -187,6 +202,15 @@ $stylesList = array_values($styles);
           <tbody id="poLinesBody">
             <tr id="poEmptyRow"><td colspan="5" class="products-empty">No lines yet — add products above.</td></tr>
           </tbody>
+          <tfoot id="poLinesFoot" hidden>
+            <tr>
+              <th id="poTotalLines">0 lines</th>
+              <th id="poTotalUnits">0</th>
+              <th></th>
+              <th id="poTotalCost">GHS 0.00</th>
+              <th></th>
+            </tr>
+          </tfoot>
         </table>
       </div>
 
@@ -240,6 +264,9 @@ $stylesList = array_values($styles);
   function refreshEmpty() {
     const has = body.querySelectorAll('tr.po-line').length > 0;
     if (empty) empty.hidden = has;
+    document.getElementById('poLinesApply').hidden = !has;
+    document.getElementById('poLinesFoot').hidden = !has;
+    refreshTotals();
   }
 
   function lineTotal(tr) {
@@ -247,7 +274,46 @@ $stylesList = array_values($styles);
     const c = parseFloat(tr.querySelector('.po-cost')?.value || 0);
     const el = tr.querySelector('.po-line-total');
     if (el) el.textContent = 'GHS ' + (q * c).toFixed(2);
+    refreshTotals();
   }
+
+  function refreshTotals() {
+    let lines = 0, units = 0, cost = 0;
+    body.querySelectorAll('tr.po-line').forEach(tr => {
+      const q = parseInt(tr.querySelector('.po-qty')?.value || '0', 10) || 0;
+      const c = parseFloat(tr.querySelector('.po-cost')?.value || '0') || 0;
+      lines++;
+      units += q;
+      cost += q * c;
+    });
+    document.getElementById('poTotalLines').textContent = lines + ' line' + (lines === 1 ? '' : 's');
+    document.getElementById('poTotalUnits').textContent = units;
+    document.getElementById('poTotalCost').textContent = 'GHS ' + cost.toFixed(2);
+  }
+
+  function applyToAllLines(field) {
+    const qIn = document.getElementById('poAllQty');
+    const cIn = document.getElementById('poAllCost');
+    const doQty = field === 'qty' || field === 'both';
+    const doCost = field === 'cost' || field === 'both';
+    const q = parseInt(qIn.value || '0', 10);
+    if (doQty && !(q >= 1)) { alert('Enter a quantity of 1 or more.'); qIn.focus(); return; }
+    if (doCost && cIn.value === '') { alert('Enter a unit cost first.'); cIn.focus(); return; }
+    body.querySelectorAll('tr.po-line').forEach(tr => {
+      if (doQty) tr.querySelector('.po-qty').value = String(q);
+      if (doCost) tr.querySelector('.po-cost').value = cIn.value;
+      lineTotal(tr);
+    });
+  }
+
+  document.getElementById('poAllQtyBtn').addEventListener('click', () => applyToAllLines('qty'));
+  document.getElementById('poAllCostBtn').addEventListener('click', () => applyToAllLines('cost'));
+  document.getElementById('poAllBothBtn').addEventListener('click', () => applyToAllLines('both'));
+  document.getElementById('poLinesApply').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !e.target.matches('input')) return;
+    e.preventDefault();
+    applyToAllLines(e.target.id === 'poAllQty' ? 'qty' : 'cost');
+  });
 
   function addLine(pid, label, qty, cost) {
     pid = String(pid);
