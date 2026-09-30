@@ -170,15 +170,21 @@ class SaleModel {
     }
 
     // ── Analytics ──────────────────────────────────────────────
+    /** One row per sale so sale totals are not repeated once per item line. */
+    private const ITEMS_PER_SALE = "(
+        SELECT sale_id, SUM(quantity) AS units, SUM(quantity * cost_price) AS cost
+        FROM sale_items GROUP BY sale_id
+    )";
+
     public function summaryForPeriod(string $start, string $end): array {
         $stmt = $this->db->prepare("
             SELECT COUNT(s.id) AS num_sales,
                    SUM(s.total) AS revenue,
-                   SUM(si.quantity) AS units_sold,
-                   SUM(si.quantity * si.cost_price) AS total_cost,
-                   SUM(s.total) - SUM(si.quantity * si.cost_price) AS gross_profit
+                   SUM(si.units) AS units_sold,
+                   SUM(si.cost) AS total_cost,
+                   SUM(s.total) - SUM(si.cost) AS gross_profit
             FROM sales s
-            JOIN sale_items si ON s.id=si.sale_id
+            JOIN ".self::ITEMS_PER_SALE." si ON s.id=si.sale_id
             WHERE DATE(s.created_at) BETWEEN ? AND ?
         ");
         $stmt->execute([$start,$end]);
@@ -202,10 +208,10 @@ class SaleModel {
     public function byLocation(string $start, string $end): array {
         $stmt = $this->db->prepare("
             SELECT l.name AS location, l.type, COUNT(s.id) AS num_sales,
-                   SUM(s.total) AS revenue, SUM(si.quantity) AS units
+                   SUM(s.total) AS revenue, SUM(si.units) AS units
             FROM sales s
             JOIN locations l ON s.location_id=l.id
-            JOIN sale_items si ON s.id=si.sale_id
+            JOIN ".self::ITEMS_PER_SALE." si ON s.id=si.sale_id
             WHERE DATE(s.created_at) BETWEEN ? AND ?
             GROUP BY l.id ORDER BY revenue DESC
         ");
@@ -216,10 +222,10 @@ class SaleModel {
     public function byStaff(string $start, string $end): array {
         $stmt = $this->db->prepare("
             SELECT u.name AS staff_name, COUNT(s.id) AS num_sales,
-                   SUM(s.total) AS revenue, SUM(si.quantity) AS units_sold
+                   SUM(s.total) AS revenue, SUM(si.units) AS units_sold
             FROM sales s
             JOIN users u ON s.staff_id=u.id
-            JOIN sale_items si ON s.id=si.sale_id
+            JOIN ".self::ITEMS_PER_SALE." si ON s.id=si.sale_id
             WHERE DATE(s.created_at) BETWEEN ? AND ?
             GROUP BY u.id ORDER BY revenue DESC
         ");
@@ -240,8 +246,8 @@ class SaleModel {
     public function todaySummary(): array {
         $stmt = $this->db->query("
             SELECT COUNT(s.id) AS num_sales, COALESCE(SUM(s.total),0) AS revenue,
-                   COALESCE(SUM(si.quantity),0) AS units_sold
-            FROM sales s LEFT JOIN sale_items si ON s.id=si.sale_id
+                   COALESCE(SUM(si.units),0) AS units_sold
+            FROM sales s LEFT JOIN ".self::ITEMS_PER_SALE." si ON s.id=si.sale_id
             WHERE DATE(s.created_at)=CURDATE()
         ");
         return $stmt->fetch();
@@ -249,8 +255,8 @@ class SaleModel {
 
     public function weekSummary(): array {
         $stmt = $this->db->query("
-            SELECT COALESCE(SUM(s.total),0) AS revenue, COALESCE(SUM(si.quantity),0) AS units_sold
-            FROM sales s LEFT JOIN sale_items si ON s.id=si.sale_id
+            SELECT COALESCE(SUM(s.total),0) AS revenue, COALESCE(SUM(si.units),0) AS units_sold
+            FROM sales s LEFT JOIN ".self::ITEMS_PER_SALE." si ON s.id=si.sale_id
             WHERE YEARWEEK(s.created_at,1)=YEARWEEK(CURDATE(),1)
         ");
         return $stmt->fetch();
