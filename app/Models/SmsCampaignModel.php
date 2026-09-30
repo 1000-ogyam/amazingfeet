@@ -213,11 +213,33 @@ class SmsCampaignModel {
         ];
     }
 
+    public static function isConfigured(): bool {
+        return defined('ARKESEL_API_KEY') && ARKESEL_API_KEY !== '' && ARKESEL_API_KEY !== 'YOUR_ARKESEL_API_KEY';
+    }
+
+    /**
+     * Send one transactional SMS (e.g. POS receipt). Short timeout so checkout is not held up.
+     * @return array{ok:bool,error:?string}
+     */
+    public function sendOne(string $phone, string $message): array {
+        if (!self::isConfigured()) {
+            return ['ok' => false, 'error' => 'Arkesel API key is not configured.'];
+        }
+        $n = self::normalizePhone($phone);
+        if ($n === null) {
+            return ['ok' => false, 'error' => 'Invalid phone number.'];
+        }
+        $res = $this->sendBatches([$n], $message, 15);
+        return $res['sent'] > 0
+            ? ['ok' => true, 'error' => null]
+            : ['ok' => false, 'error' => (string)($res['err'][$n] ?? 'SMS failed.')];
+    }
+
     /**
      * @param list<string> $phones
      * @return array{sent:int,failed:int,ok:list<string>,err:array<string,string>,responses:list<mixed>}
      */
-    private function sendBatches(array $phones, string $message): array {
+    private function sendBatches(array $phones, string $message, int $timeout = 60): array {
         $ok = [];
         $err = [];
         $responses = [];
@@ -231,7 +253,7 @@ class SmsCampaignModel {
                 'message'    => $message,
                 'recipients' => $batch,
             ];
-            $res = $this->httpPostJson(self::SEND_URL, $payload);
+            $res = $this->httpPostJson(self::SEND_URL, $payload, $timeout);
             $responses[] = $res['body'];
 
             $success = $res['http'] >= 200 && $res['http'] < 300
@@ -313,7 +335,7 @@ class SmsCampaignModel {
     }
 
     /** @return array{http:int,body:mixed,raw:string,error:?string} */
-    private function httpPostJson(string $url, array $payload): array {
+    private function httpPostJson(string $url, array $payload, int $timeout = 60): array {
         $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
         if ($json === false) {
             return ['http' => 0, 'body' => null, 'raw' => '', 'error' => 'Failed to encode JSON'];
@@ -325,7 +347,8 @@ class SmsCampaignModel {
                 CURLOPT_POST           => true,
                 CURLOPT_POSTFIELDS     => $json,
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT        => 60,
+                CURLOPT_TIMEOUT        => $timeout,
+                CURLOPT_CONNECTTIMEOUT => min(10, $timeout),
                 CURLOPT_HTTPHEADER     => [
                     'Content-Type: application/json',
                     'Accept: application/json',
@@ -348,7 +371,7 @@ class SmsCampaignModel {
                 'method'  => 'POST',
                 'header'  => "Content-Type: application/json\r\nAccept: application/json\r\napi-key: " . ARKESEL_API_KEY . "\r\n",
                 'content' => $json,
-                'timeout' => 60,
+                'timeout' => $timeout,
                 'ignore_errors' => true,
             ],
         ]);

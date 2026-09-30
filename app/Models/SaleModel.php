@@ -3,18 +3,27 @@ class SaleModel {
     private PDO $db;
     public function __construct() { $this->db = getDB(); }
 
-    public function generateRef(): string {
-        return 'AF-'.date('Ymd').'-'.strtoupper(substr(uniqid(), -5));
+    public function generateRef(?string $date = null): string {
+        $ymd = $date ? str_replace('-', '', $date) : date('Ymd');
+        return 'AF-'.$ymd.'-'.strtoupper(substr(uniqid(), -5));
     }
 
-    /** @param bool $useTransaction set false when already inside a parent transaction */
+    /** Today's date according to MySQL (sales timestamps use the DB clock). */
+    public function dbToday(): string {
+        return (string)$this->db->query('SELECT CURDATE()')->fetchColumn();
+    }
+
+    /**
+     * @param array $sale optional 'sale_date' (Y-m-d) backdates the sale, keeping the current time of day
+     * @param bool $useTransaction set false when already inside a parent transaction
+     */
     public function create(array $sale, array $items, bool $useTransaction = true): int {
         if ($useTransaction) $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare("
                 INSERT INTO sales (sale_ref,staff_id,location_id,customer_id,subtotal,discount,total,
-                    payment_method,amount_tendered,change_due,momo_ref,notes)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                    payment_method,amount_tendered,change_due,momo_ref,notes,created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?, COALESCE(CONCAT(?, ' ', CURTIME()), NOW()))
             ");
             $stmt->execute([
                 $sale['sale_ref'], $sale['staff_id'], $sale['location_id'],
@@ -22,6 +31,7 @@ class SaleModel {
                 $sale['total'], $sale['payment_method'],
                 $sale['amount_tendered']??null, $sale['change_due']??null,
                 $sale['momo_ref']??null, $sale['notes']??null,
+                $sale['sale_date']??null,
             ]);
             $saleId = (int)$this->db->lastInsertId();
 

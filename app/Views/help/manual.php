@@ -125,7 +125,9 @@ $role = $isOwner ? 'owner' : 'staff';
         <li>Choose payment: <strong>Cash</strong>, <strong>Mobile Money</strong>, or <strong>Card</strong>.</li>
         <li><strong>Cash</strong> — enter amount tendered; change is calculated automatically.</li>
         <li><strong>MoMo</strong> — enter the transaction / reference ID when available.</li>
-        <li>Optionally add customer name, phone, shoe size, and notes.</li>
+        <li>Enter the customer's name and phone number (required); shoe size and notes are optional. An SMS receipt is sent to the customer's phone after the sale.</li>
+        <li>Tick <strong>Use as default on this device</strong> under Sale Location so that location is pre-selected on this till next time.</li>
+        <li>The owner can change the <strong>Sale Date</strong> to record a sale on an earlier day (future dates are not allowed).</li>
         <li>Tap <strong>Complete Sale</strong>. Stock is deducted immediately.</li>
       </ul>
       <div class="guide-callout ok">After a successful sale, a receipt opens in an overlay. You can print it without leaving the POS.</div>
@@ -228,7 +230,7 @@ $role = $isOwner ? 'owner' : 'staff';
     <section class="guide-section" id="customers">
       <h2><i class="fa-solid fa-address-book" aria-hidden="true"></i> Customers <span class="guide-badge guide-badge-owner">Owner</span></h2>
       <ul>
-        <li>Customers can be captured during POS checkout (optional) or added manually here.</li>
+        <li>Customers are captured at every POS checkout (name and phone are required) or can be added manually here.</li>
         <li>Store name, phone, shoe size, and notes for follow-up.</li>
         <li>Search by name or phone; <strong>Export CSV</strong> for marketing or backups.</li>
       </ul>
@@ -295,7 +297,7 @@ $role = $isOwner ? 'owner' : 'staff';
       <ul>
         <li>Confirm size with the customer before adding to cart.</li>
         <li>For MoMo, save the reference — it helps resolve payment disputes later.</li>
-        <li>Add customer phone when they may return for another size or pair.</li>
+        <li>Double-check the customer's phone number — their SMS receipt goes to it.</li>
       </ul>
       <h3>Common issues</h3>
       <div class="guide-table-wrap">

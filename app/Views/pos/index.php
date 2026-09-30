@@ -121,12 +121,15 @@
       <div class="pay-modal-body">
         <div class="form-row pay-modal-row">
           <div class="form-group">
-            <label>Sale Location *</label>
-            <select name="location_id" required>
+            <label for="saleLocation">Sale Location *</label>
+            <select name="location_id" id="saleLocation" required>
               <?php foreach ($locations as $l): ?>
               <option value="<?= $l['id'] ?>"><?= e($l['name']) ?></option>
               <?php endforeach; ?>
             </select>
+            <label class="pay-default-loc">
+              <input type="checkbox" id="locDefault"> Use as default on this device
+            </label>
           </div>
           <div class="form-group">
             <label>Payment Method *</label>
@@ -164,23 +167,32 @@
           <div class="pay-modal-summary-row"><span>Discount</span><span id="modalDiscount">GHS 0.00</span></div>
           <div class="pay-modal-summary-row pay-modal-summary-total"><span>TOTAL</span><span id="modalTotal">GHS 0.00</span></div>
         </div>
-        <details class="pay-modal-details">
-          <summary>Add customer (optional)</summary>
+        <fieldset class="pay-modal-customer">
+          <legend><i class="fa-solid fa-user" aria-hidden="true"></i> Customer details</legend>
           <div class="form-row pay-modal-row">
             <div class="form-group">
-              <label>Customer Name</label>
-              <input type="text" name="customer_name" placeholder="e.g. Abena Mensah">
+              <label for="custName">Customer Name *</label>
+              <input type="text" name="customer_name" id="custName" placeholder="e.g. Abena Mensah" required autocomplete="off">
             </div>
             <div class="form-group">
-              <label>Phone</label>
-              <input type="tel" name="customer_phone" placeholder="+233…">
+              <label for="custPhone">Phone *</label>
+              <input type="tel" name="customer_phone" id="custPhone" placeholder="e.g. 0241234567" required
+                     inputmode="tel" pattern="\s*\+?[0-9\s\-]{9,16}\s*" title="Enter a valid phone number, e.g. 0241234567" autocomplete="off">
             </div>
           </div>
           <div class="form-group">
-            <label>Shoe Size (for records)</label>
-            <input type="text" name="customer_size" placeholder="e.g. 32">
+            <label for="custSize">Shoe Size (for records)</label>
+            <input type="text" name="customer_size" id="custSize" placeholder="e.g. 32" autocomplete="off">
           </div>
-        </details>
+          <p class="pay-modal-hint text-muted text-sm"><i class="fa-solid fa-comment-sms" aria-hidden="true"></i> An SMS receipt is sent to this number after the sale.</p>
+        </fieldset>
+        <?php if (isOwner()): ?>
+        <div class="form-group pay-sale-date">
+          <label for="saleDate"><i class="fa-solid fa-calendar-day" aria-hidden="true"></i> Sale Date <span class="text-muted">(owner only)</span></label>
+          <input type="date" name="sale_date" id="saleDate" value="<?= e($today) ?>" max="<?= e($today) ?>" data-today="<?= e($today) ?>">
+          <p class="pay-modal-hint text-muted text-sm" id="saleDateHint" hidden><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> This sale will be recorded on <strong id="saleDateLabel"></strong> and counted in that day's reports.</p>
+        </div>
+        <?php endif; ?>
         <div class="form-group pay-modal-notes">
           <label>Notes</label>
           <input type="text" name="notes" placeholder="Optional note for this sale">
@@ -213,7 +225,10 @@
 <div class="pos-receipt-frame hidden" id="receiptFrame" aria-hidden="true">
   <div class="pos-receipt-panel">
     <div class="pos-receipt-toolbar no-print">
-      <h3><i class="fa-solid fa-receipt" aria-hidden="true"></i> Sale complete</h3>
+      <div>
+        <h3><i class="fa-solid fa-receipt" aria-hidden="true"></i> Sale complete</h3>
+        <p class="pos-receipt-sms" id="receiptSms" hidden></p>
+      </div>
       <div class="pos-receipt-actions">
         <button type="button" class="btn btn-primary btn-sm" onclick="printReceipt()"><i class="fa-solid fa-print" aria-hidden="true"></i> Print</button>
         <button type="button" class="btn btn-success btn-sm" onclick="newSale()"><i class="fa-solid fa-cart-shopping" aria-hidden="true"></i> New Sale</button>
@@ -402,10 +417,10 @@ function renderProductGrid(products) {
           <span class="pt-price">${priceLabel}</span>
         </div>
         ${(() => {
-          const skus = (p.variants || []).map(v => v.sku).filter(Boolean);
+          const skus = [...new Set((p.variants || []).map(v => String(v.sku || '').trim()).filter(Boolean))];
           if (!skus.length) return '';
-          const label = skus.length === 1 ? skus[0] : (skus.length + ' SKUs');
-          return `<div class="pt-sku mono">${escHtml(label)}</div>`;
+          return `<div class="pt-sku mono" title="${escAttr(skus.join(', '))}">SKU ${escHtml(skus[0])}` +
+            (skus.length > 1 ? ` <span class="pt-sku-more">+${skus.length - 1}</span>` : '') + `</div>`;
         })()}
         <div class="pt-stock">${stockLine}</div>
       </div>
@@ -632,10 +647,46 @@ function openCheckout() {
   document.getElementById('discountModal').value = disc;
   document.getElementById('tenderedInput').value = tot.toFixed(2);
   document.getElementById('saleError').hidden = true;
+  applyDefaultLocation();
+  syncSaleDateHint();
   calcChange();
   document.getElementById('payModal').classList.remove('hidden');
 }
 function closeCheckout() { document.getElementById('payModal').classList.add('hidden'); }
+
+const LOC_KEY = 'afPosDefaultLocation';
+const locSelect = document.getElementById('saleLocation');
+const locDefault = document.getElementById('locDefault');
+function storedLocation() {
+  try { return localStorage.getItem(LOC_KEY) || ''; } catch (e) { return ''; }
+}
+function applyDefaultLocation() {
+  const saved = storedLocation();
+  if (saved && [...locSelect.options].some(o => o.value === saved)) locSelect.value = saved;
+  locDefault.checked = saved !== '' && locSelect.value === saved;
+}
+locSelect.addEventListener('change', () => { locDefault.checked = locSelect.value === storedLocation(); });
+locDefault.addEventListener('change', () => {
+  try {
+    if (locDefault.checked) localStorage.setItem(LOC_KEY, locSelect.value);
+    else localStorage.removeItem(LOC_KEY);
+  } catch (e) { /* storage unavailable (private mode) */ }
+});
+applyDefaultLocation();
+
+const saleDateIn = document.getElementById('saleDate');
+function syncSaleDateHint() {
+  if (!saleDateIn) return;
+  const backdated = saleDateIn.value !== '' && saleDateIn.value !== saleDateIn.dataset.today;
+  document.getElementById('saleDateHint').hidden = !backdated;
+  saleDateIn.classList.toggle('is-backdated', backdated);
+  if (backdated) {
+    const d = new Date(saleDateIn.value + 'T00:00:00');
+    document.getElementById('saleDateLabel').textContent =
+      d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  }
+}
+if (saleDateIn) saleDateIn.addEventListener('input', syncSaleDateHint);
 
 function syncDiscount() {
   const d = document.getElementById('discountModal').value;
@@ -683,6 +734,14 @@ document.getElementById('saleForm').addEventListener('submit', async e => {
     }
     closeCheckout();
     showReceipt(data.receipt_url);
+    const smsEl = document.getElementById('receiptSms');
+    if (data.sms) {
+      smsEl.textContent = data.sms.message;
+      smsEl.classList.toggle('is-failed', !data.sms.ok);
+      smsEl.hidden = false;
+    } else {
+      smsEl.hidden = true;
+    }
   } catch (ex) {
     err.textContent = 'Network error. Please try again.';
     err.hidden = false;
@@ -730,6 +789,11 @@ function newSale() {
   document.getElementById('receiptFrame').classList.add('hidden');
   document.getElementById('receiptFrame').setAttribute('aria-hidden', 'true');
   document.getElementById('receiptIframe').src = 'about:blank';
+  document.getElementById('receiptSms').hidden = true;
+  ['custName', 'custPhone', 'custSize'].forEach(id => { document.getElementById(id).value = ''; });
+  document.querySelector('#saleForm [name="notes"]').value = '';
+  document.querySelector('#saleForm [name="momo_ref"]').value = '';
+  if (saleDateIn) { saleDateIn.value = saleDateIn.dataset.today; syncSaleDateHint(); }
   loadPosProducts(1);
 }
 

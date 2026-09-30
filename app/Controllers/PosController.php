@@ -15,7 +15,8 @@ class PosController {
     public function index(): void {
         $locations = $this->locations->all();
         $categories = (new CategoryModel())->all();
-        view('pos/index', compact('locations', 'categories'));
+        $today = $this->sales->dbToday();
+        view('pos/index', compact('locations', 'categories', 'today'));
     }
 
     public function processSale(): void {
@@ -36,6 +37,39 @@ class PosController {
                 exit;
             }
             flash('error', 'Cart is empty.');
+            redirect('/pos');
+        }
+
+        $custName  = trim($_POST['customer_name'] ?? '');
+        $custPhone = trim($_POST['customer_phone'] ?? '');
+        $normPhone = SmsCampaignModel::normalizePhone($custPhone);
+        $custError = null;
+        if ($custName === '' || $custPhone === '') {
+            $custError = 'Customer name and phone number are required.';
+        } elseif ($normPhone === null) {
+            $custError = 'Enter a valid customer phone number (e.g. 0241234567).';
+        }
+
+        $saleDate = null;
+        $rawDate = trim($_POST['sale_date'] ?? '');
+        if (!$custError && isOwner() && $rawDate !== '') {
+            $dt = DateTime::createFromFormat('!Y-m-d', $rawDate);
+            $today = $this->sales->dbToday();
+            if (!$dt || $dt->format('Y-m-d') !== $rawDate) {
+                $custError = 'Enter a valid sale date.';
+            } elseif ($rawDate > $today) {
+                $custError = 'Sale date cannot be in the future.';
+            } elseif ($rawDate < $today) {
+                $saleDate = $rawDate;
+            }
+        }
+        if ($custError) {
+            if ($wantsJson) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['ok' => false, 'error' => $custError]);
+                exit;
+            }
+            flash('error', $custError);
             redirect('/pos');
         }
 
@@ -72,25 +106,26 @@ class PosController {
         $tendered  = (float)($_POST['amount_tendered'] ?? $total);
         $change    = $payMethod === 'cash' ? max(0, $tendered - $total) : 0;
 
-        // Optional: create or find customer
-        $customerId = null;
-        $custName   = trim($_POST['customer_name'] ?? '');
-        $custPhone  = trim($_POST['customer_phone'] ?? '');
-        if ($custName || $custPhone) {
-            $existing = $custPhone ? $this->customers->findByPhone($custPhone) : null;
-            if ($existing) {
-                $customerId = $existing['id'];
-            } else {
-                $customerId = $this->customers->create([
-                    'name'      => $custName,
-                    'phone'     => $custPhone,
-                    'shoe_size' => trim($_POST['customer_size'] ?? ''),
-                ]);
-            }
+        $existing = null;
+        foreach (self::phoneVariants($custPhone, $normPhone) as $variant) {
+            $existing = $this->customers->findByPhone($variant);
+            if ($existing) break;
+        }
+        if ($existing) {
+            $customerId = (int)$existing['id'];
+        } else {
+            $isGhana = strlen($normPhone) === 12 && str_starts_with($normPhone, '233');
+            $customerId = $this->customers->create([
+                'name'      => $custName,
+                'phone'     => $isGhana ? '0' . substr($normPhone, 3) : '+' . $normPhone,
+                'shoe_size' => trim($_POST['customer_size'] ?? ''),
+            ]);
         }
 
+        $saleRef = $this->sales->generateRef($saleDate);
         $saleId = $this->sales->create([
-            'sale_ref'        => $this->sales->generateRef(),
+            'sale_ref'        => $saleRef,
+            'sale_date'       => $saleDate,
             'staff_id'        => $_SESSION['user_id'],
             'location_id'     => (int)($_POST['location_id'] ?? 1),
             'customer_id'     => $customerId,
@@ -104,17 +139,62 @@ class PosController {
             'notes'           => trim($_POST['notes'] ?? '') ?: null,
         ], $items);
 
+        $sms = $this->sendReceiptSms($saleId, $saleRef, $custName, $custPhone, $discount, $total, $payMethod, $change);
+
         if ($wantsJson) {
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode([
                 'ok'          => true,
                 'sale_id'     => $saleId,
                 'receipt_url' => BASE_PATH . '/pos/receipt/' . $saleId . '?embed=1',
+                'sms'         => $sms,
             ]);
             exit;
         }
 
+        if (!$sms['ok']) flash('error', $sms['message']);
         redirect('/pos/receipt/' . $saleId);
+    }
+
+    /** Stored customer phones may be in local (0…), 233… or +233… form. */
+    private static function phoneVariants(string $raw, string $norm): array {
+        $v = [$raw, $norm, '+' . $norm];
+        if (strlen($norm) === 12 && str_starts_with($norm, '233')) {
+            $v[] = '0' . substr($norm, 3);
+        }
+        return array_values(array_unique($v));
+    }
+
+    /** @return array{ok:bool,message:string} */
+    private function sendReceiptSms(int $saleId, string $saleRef, string $name, string $phone,
+                                    float $discount, float $total, string $payMethod, float $change): array {
+        try {
+            if (!SmsCampaignModel::isConfigured()) {
+                return ['ok' => false, 'message' => 'SMS receipt not sent: Arkesel is not configured.'];
+            }
+            $payLabels = ['cash' => 'Cash', 'momo' => 'MoMo', 'card' => 'Card'];
+            $first = explode(' ', $name)[0];
+            $lines = [APP_NAME . ' receipt ' . $saleRef, 'Thank you, ' . $first . '!'];
+            $items = $this->sales->getItems($saleId);
+            foreach (array_slice($items, 0, 3) as $it) {
+                $lines[] = $it['name'] . ' Sz ' . $it['size'] . ' x' . (int)$it['quantity'] . ': ' . money($it['line_total']);
+            }
+            if (count($items) > 3) {
+                $lines[] = '+' . (count($items) - 3) . ' more item(s)';
+            }
+            if ($discount > 0) $lines[] = 'Discount: ' . money($discount);
+            $lines[] = 'Total: ' . money($total) . ' (' . ($payLabels[$payMethod] ?? ucfirst($payMethod)) . ')';
+            if ($payMethod === 'cash' && $change > 0) $lines[] = 'Change: ' . money($change);
+            $createdAt = $this->sales->findById($saleId)['created_at'] ?? null;
+            $lines[] = date('d M Y, g:i A', $createdAt ? strtotime($createdAt) : time());
+
+            $res = (new SmsCampaignModel())->sendOne($phone, implode("\n", $lines));
+            return $res['ok']
+                ? ['ok' => true, 'message' => 'SMS receipt sent to ' . $phone . '.']
+                : ['ok' => false, 'message' => 'SMS receipt not sent: ' . $res['error']];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'message' => 'SMS receipt not sent: ' . $e->getMessage()];
+        }
     }
 
     public function receipt(string $id): void {

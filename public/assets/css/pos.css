@@ -99,7 +99,8 @@
 .pt-size{font-size:.64rem;font-weight:700;background:var(--bg3);padding:.08rem .3rem;border-radius:4px}
 .pt-price{margin-left:auto;font-weight:700;color:var(--accent);font-size:.8rem;letter-spacing:-.01em}
 .pt-stock{font-size:.65rem;color:var(--muted)}
-.pt-sku{font-size:.68rem;color:var(--muted);margin-top:.15rem;letter-spacing:.02em}
+.pt-sku{font-size:.68rem;color:var(--muted);margin-top:.15rem;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pt-sku-more{font-weight:700;color:var(--text)}
 .pt-stock-row{display:inline-flex;align-items:center;gap:.2rem;color:var(--danger);font-weight:600}
 .pt-stock-ok{display:inline}
 
@@ -170,6 +171,9 @@
 }
 .pos-receipt-toolbar h3{font-size:.95rem;display:flex;align-items:center;gap:.4rem;margin:0}
 .pos-receipt-toolbar h3 i{color:var(--accent)}
+.pos-receipt-sms{margin:.2rem 0 0;font-size:.78rem;color:var(--success,#15803d)}
+.pos-receipt-sms.is-failed{color:var(--danger,#b91c1c)}
+.pos-receipt-sms[hidden]{display:none}
 .pos-receipt-actions{display:flex;gap:.4rem;flex-wrap:wrap}
 .pos-receipt-iframe{flex:1;width:100%;border:0;background:#fff}
 
