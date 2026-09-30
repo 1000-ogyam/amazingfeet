@@ -149,6 +149,13 @@ $stylesList = array_values($styles);
             <button type="button" class="btn btn-ghost btn-xs" id="poBulkApplyCost">Apply cost</button>
             <button type="button" class="btn btn-ghost btn-xs" id="poBulkClearQty">Clear qtys</button>
           </div>
+          <div class="po-filter-row">
+            <div class="po-search-input">
+              <i class="fa-solid fa-filter" aria-hidden="true"></i>
+              <input type="search" id="poBulkFilter" placeholder="Filter loaded sizes by style, size or SKU…" autocomplete="off">
+            </div>
+            <span class="text-muted text-sm" id="poBulkFilterInfo"></span>
+          </div>
           <div class="table-wrap" style="border:1px solid var(--border);border-radius:8px;max-height:380px;overflow:auto;margin-bottom:.65rem">
             <table id="poBulkSizeTable">
               <thead>
@@ -174,7 +181,17 @@ $stylesList = array_values($styles);
       </div>
 
       <div class="po-lines-apply" id="poLinesApply" hidden>
-        <span class="po-lines-apply-title">Apply to all lines</span>
+        <div class="po-filter-row" style="width:100%;margin:0 0 .35rem">
+          <div class="po-search-input">
+            <i class="fa-solid fa-filter" aria-hidden="true"></i>
+            <input type="search" id="poLinesFilter" placeholder="Find in this order by product, size or SKU…" autocomplete="off">
+          </div>
+          <span class="text-muted text-sm" id="poLinesFilterInfo"></span>
+          <button type="button" class="btn btn-ghost btn-xs" id="poRemoveShown" hidden>
+            <i class="fa-solid fa-trash" aria-hidden="true"></i> Remove shown
+          </button>
+        </div>
+        <span class="po-lines-apply-title" id="poLinesApplyTitle">Apply to all lines</span>
         <label>
           Qty
           <input type="number" id="poAllQty" min="1" placeholder="e.g. 6">
@@ -201,6 +218,7 @@ $stylesList = array_values($styles);
           </thead>
           <tbody id="poLinesBody">
             <tr id="poEmptyRow"><td colspan="5" class="products-empty">No lines yet — add products above.</td></tr>
+            <tr id="poNoMatchRow" hidden><td colspan="5" class="products-empty">No lines in this order match your filter.</td></tr>
           </tbody>
           <tfoot id="poLinesFoot" hidden>
             <tr>
@@ -261,13 +279,58 @@ $stylesList = array_values($styles);
     return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
   }
 
+  function termsOf(value) {
+    return value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  }
+
+  const linesFilter = document.getElementById('poLinesFilter');
+  const noMatchRow = document.getElementById('poNoMatchRow');
+  const removeShownBtn = document.getElementById('poRemoveShown');
+
+  function visibleLines() {
+    return [...body.querySelectorAll('tr.po-line')].filter(tr => !tr.hidden);
+  }
+
+  function filterLines() {
+    const terms = termsOf(linesFilter.value);
+    const rows = [...body.querySelectorAll('tr.po-line')];
+    let shownN = 0;
+    rows.forEach(tr => {
+      const ok = terms.every(t => tr.dataset.search.indexOf(t) !== -1);
+      tr.hidden = !ok;
+      if (ok) shownN++;
+    });
+    const filtering = terms.length > 0;
+    noMatchRow.hidden = !(filtering && rows.length && shownN === 0);
+    removeShownBtn.hidden = !(filtering && shownN > 0);
+    document.getElementById('poLinesFilterInfo').textContent = filtering
+      ? 'Showing ' + shownN + ' of ' + rows.length + ' lines'
+      : '';
+    document.getElementById('poLinesApplyTitle').textContent = filtering
+      ? 'Apply to ' + shownN + ' shown line' + (shownN === 1 ? '' : 's')
+      : 'Apply to all lines';
+  }
+
   function refreshEmpty() {
     const has = body.querySelectorAll('tr.po-line').length > 0;
     if (empty) empty.hidden = has;
+    if (!has) linesFilter.value = '';
     document.getElementById('poLinesApply').hidden = !has;
     document.getElementById('poLinesFoot').hidden = !has;
+    filterLines();
     refreshTotals();
   }
+
+  linesFilter.addEventListener('input', filterLines);
+
+  removeShownBtn.addEventListener('click', () => {
+    const rows = visibleLines();
+    if (!rows.length) return;
+    if (!confirm('Remove ' + rows.length + ' line' + (rows.length === 1 ? '' : 's') + ' from this order?')) return;
+    rows.forEach(tr => { added.delete(tr.dataset.pid); tr.remove(); });
+    linesFilter.value = '';
+    refreshEmpty();
+  });
 
   function lineTotal(tr) {
     const q = parseFloat(tr.querySelector('.po-qty')?.value || 0);
@@ -299,7 +362,7 @@ $stylesList = array_values($styles);
     const q = parseInt(qIn.value || '0', 10);
     if (doQty && !(q >= 1)) { alert('Enter a quantity of 1 or more.'); qIn.focus(); return; }
     if (doCost && cIn.value === '') { alert('Enter a unit cost first.'); cIn.focus(); return; }
-    body.querySelectorAll('tr.po-line').forEach(tr => {
+    visibleLines().forEach(tr => {
       if (doQty) tr.querySelector('.po-qty').value = String(q);
       if (doCost) tr.querySelector('.po-cost').value = cIn.value;
       lineTotal(tr);
@@ -312,6 +375,7 @@ $stylesList = array_values($styles);
   document.getElementById('poLinesApply').addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || !e.target.matches('input')) return;
     e.preventDefault();
+    if (e.target === linesFilter) return;
     applyToAllLines(e.target.id === 'poAllQty' ? 'qty' : 'cost');
   });
 
@@ -329,6 +393,7 @@ $stylesList = array_values($styles);
     const tr = document.createElement('tr');
     tr.className = 'po-line';
     tr.dataset.pid = pid;
+    tr.dataset.search = String(label).replace(/·\s*stock\s+-?\d+/i, '').toLowerCase();
     const i = idx++;
     tr.innerHTML =
       '<td><input type="hidden" name="items[' + i + '][product_id]" value="' + pid + '"><strong>' + esc(label) + '</strong></td>' +
@@ -422,6 +487,7 @@ $stylesList = array_values($styles);
         const tr = document.createElement('tr');
         tr.className = 'po-bulk-row';
         tr.dataset.style = i;
+        tr.dataset.search = (style.label + ' sz ' + sz.size + ' ' + (sz.sku || '')).toLowerCase();
         tr.innerHTML =
           '<td><input type="checkbox" class="po-bulk-check" checked style="width:auto" data-id="' + sz.id + '"></td>' +
           '<td><strong>Sz ' + esc(sz.size) + '</strong></td>' +
@@ -432,8 +498,47 @@ $stylesList = array_values($styles);
         bulkBody.appendChild(tr);
       });
     });
-    document.getElementById('poBulkCheckAll').checked = true;
+    bulkFilter.value = '';
+    filterBulk();
   }
+
+  const bulkFilter = document.getElementById('poBulkFilter');
+  const bulkCheckAll = document.getElementById('poBulkCheckAll');
+
+  function visibleBulkRows() {
+    return [...bulkBody.querySelectorAll('tr.po-bulk-row')].filter(tr => !tr.hidden);
+  }
+
+  function syncBulkCheckAll() {
+    const rows = visibleBulkRows();
+    const on = rows.filter(tr => tr.querySelector('.po-bulk-check').checked).length;
+    bulkCheckAll.disabled = rows.length === 0;
+    bulkCheckAll.checked = rows.length > 0 && on === rows.length;
+    bulkCheckAll.indeterminate = on > 0 && on < rows.length;
+  }
+
+  function filterBulk() {
+    const terms = termsOf(bulkFilter.value);
+    const rows = [...bulkBody.querySelectorAll('tr.po-bulk-row')];
+    let shownN = 0;
+    rows.forEach(tr => {
+      const ok = terms.every(t => tr.dataset.search.indexOf(t) !== -1);
+      tr.hidden = !ok;
+      if (ok) shownN++;
+    });
+    bulkBody.querySelectorAll('tr.po-bulk-group').forEach(head => {
+      const i = head.querySelector('.po-bulk-drop').dataset.i;
+      head.hidden = !rows.some(tr => tr.dataset.style === i && !tr.hidden);
+    });
+    const info = document.getElementById('poBulkFilterInfo');
+    if (!terms.length) info.textContent = '';
+    else if (!shownN) info.textContent = 'No sizes match — ticked sizes are still added';
+    else info.textContent = 'Showing ' + shownN + ' of ' + rows.length + ' sizes';
+    syncBulkCheckAll();
+  }
+
+  bulkFilter.addEventListener('input', filterBulk);
+  bulkFilter.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
 
   function loadSelected() {
     if (!selected.size) return;
@@ -482,6 +587,7 @@ $stylesList = array_values($styles);
     bulkBody.querySelectorAll('tr.po-bulk-row[data-style="' + i + '"]').forEach(tr => tr.remove());
     drop.closest('tr').remove();
     if (!bulkBody.querySelector('tr.po-bulk-row')) bulkPanel.hidden = true;
+    filterBulk();
     renderResults();
   });
 
@@ -496,27 +602,33 @@ $stylesList = array_values($styles);
     bulkBody.innerHTML = '';
   });
 
-  document.getElementById('poBulkCheckAll').addEventListener('change', (e) => {
-    bulkBody.querySelectorAll('.po-bulk-check').forEach(c => { c.checked = e.target.checked; });
+  bulkCheckAll.addEventListener('change', () => {
+    visibleBulkRows().forEach(tr => { tr.querySelector('.po-bulk-check').checked = bulkCheckAll.checked; });
+    syncBulkCheckAll();
+  });
+
+  bulkBody.addEventListener('change', (e) => {
+    if (e.target.matches('.po-bulk-check')) syncBulkCheckAll();
   });
 
   document.getElementById('poBulkApplyQty').addEventListener('click', () => {
     const q = Math.max(0, parseInt(document.getElementById('poBulkSameQty').value || '0', 10));
-    bulkBody.querySelectorAll('.po-bulk-qty').forEach(inp => { inp.value = String(q); });
+    visibleBulkRows().forEach(tr => { tr.querySelector('.po-bulk-qty').value = String(q); });
   });
 
   document.getElementById('poBulkApplyCost').addEventListener('click', () => {
     const c = document.getElementById('poBulkSameCost').value;
     if (c === '') { alert('Enter a cost first.'); return; }
-    bulkBody.querySelectorAll('.po-bulk-cost').forEach(inp => { inp.value = c; });
+    visibleBulkRows().forEach(tr => { tr.querySelector('.po-bulk-cost').value = c; });
   });
 
   document.getElementById('poBulkClearQty').addEventListener('click', () => {
-    bulkBody.querySelectorAll('.po-bulk-qty').forEach(inp => { inp.value = '0'; });
+    visibleBulkRows().forEach(tr => { tr.querySelector('.po-bulk-qty').value = '0'; });
   });
 
   document.getElementById('poBulkAddBtn').addEventListener('click', () => {
     let addedN = 0, mergedN = 0;
+    linesFilter.value = '';
     bulkBody.querySelectorAll('tr.po-bulk-row').forEach(tr => {
       const check = tr.querySelector('.po-bulk-check');
       const qtyEl = tr.querySelector('.po-bulk-qty');
@@ -527,6 +639,7 @@ $stylesList = array_values($styles);
       const r = addLine(qtyEl.dataset.id, qtyEl.dataset.label, qty, costEl.value);
       if (r === 'merged') mergedN++; else addedN++;
     });
+    filterLines();
     if (addedN + mergedN < 1) {
       alert('Enter a quantity (≥ 1) on at least one checked size.');
       return;

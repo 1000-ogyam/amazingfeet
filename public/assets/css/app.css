@@ -576,6 +576,10 @@ canvas{max-width:100%}
 .po-lines-apply-title{font-weight:600;font-size:.84rem;margin-right:.25rem}
 .po-lines-apply label{display:inline-flex;align-items:center;gap:.35rem;margin:0;font-size:.82rem;font-weight:500;text-transform:none;letter-spacing:0}
 .po-lines-apply input{width:6rem;margin:0}
+.po-filter-row{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.1rem 0 .55rem}
+.po-filter-row .po-search-input{flex:1 1 16rem;max-width:26rem}
+.po-lines-apply .po-filter-row input{width:100%}
+.po-filter-row [hidden]{display:none}
 #poLinesFoot th{background:var(--bg3);text-align:left;text-transform:none;letter-spacing:0;font-size:.84rem}
 @media (max-width:640px){
   .po-result{flex-wrap:wrap}
