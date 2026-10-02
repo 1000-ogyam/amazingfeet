@@ -10,7 +10,8 @@ class PurchaseOrderModel {
         return 'PO-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -5));
     }
 
-    public function all(array $f = []): array {
+    /** @return array{0:string,1:array} WHERE clause and params */
+    private function listWhere(array $f): array {
         $w = ['1=1'];
         $p = [];
         if (!empty($f['status'])) {
@@ -22,6 +23,20 @@ class PurchaseOrderModel {
             $q = '%' . $f['search'] . '%';
             array_push($p, $q, $q, $q);
         }
+        return [implode(' AND ', $w), $p];
+    }
+
+    public function count(array $f = []): int {
+        [$where, $p] = $this->listWhere($f);
+        $stmt = $this->db->prepare("SELECT COUNT(*) FROM purchase_orders po WHERE $where");
+        $stmt->execute($p);
+        return (int)$stmt->fetchColumn();
+    }
+
+    public function all(array $f = [], int $page = 1, int $perPage = 200): array {
+        [$where, $p] = $this->listWhere($f);
+        $perPage = max(1, min(200, $perPage));
+        $offset = (max(1, $page) - 1) * $perPage;
         $sql = "
             SELECT po.*,
                    u.name AS created_by_name,
@@ -33,9 +48,9 @@ class PurchaseOrderModel {
             FROM purchase_orders po
             JOIN users u ON po.created_by=u.id
             LEFT JOIN users r ON po.received_by=r.id
-            WHERE " . implode(' AND ', $w) . "
-            ORDER BY po.created_at DESC
-            LIMIT 200
+            WHERE $where
+            ORDER BY po.created_at DESC, po.id DESC
+            LIMIT {$perPage} OFFSET {$offset}
         ";
         $stmt = $this->db->prepare($sql);
         $stmt->execute($p);

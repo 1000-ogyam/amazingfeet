@@ -639,6 +639,7 @@ canvas{max-width:100%}
   display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;
   padding:.75rem 1rem;border-top:1px solid var(--border);background:var(--bg2);
 }
+.products-pager[hidden]{display:none}
 .products-pager-btns{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
 .products-pager-btns .btn:disabled{opacity:.4;cursor:not-allowed}
 .products-page-current{pointer-events:none}

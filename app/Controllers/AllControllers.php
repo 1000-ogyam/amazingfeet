@@ -834,8 +834,14 @@ class PurchaseController {
             'status' => $_GET['status'] ?? '',
             'search' => trim($_GET['search'] ?? ''),
         ];
-        $orders = $this->pom->all(array_filter($filters, static fn($v) => $v !== '' && $v !== null));
-        view('owner/purchases', compact('orders', 'filters'));
+        $active = array_filter($filters, static fn($v) => $v !== '' && $v !== null);
+        $perPage = 10;
+        $total = $this->pom->count($active);
+        $totalPages = max(1, (int)ceil($total / $perPage));
+        $page = min(max(1, (int)($_GET['page'] ?? 1)), $totalPages);
+        $orders = $this->pom->all($active, $page, $perPage);
+        $pagination = compact('page', 'perPage', 'total', 'totalPages');
+        view('owner/purchases', compact('orders', 'filters', 'pagination'));
     }
 
     public function create(): void {

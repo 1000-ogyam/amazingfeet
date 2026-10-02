@@ -97,7 +97,7 @@ foreach ($items as $it) {
           <?php foreach ($items as $it):
             $remaining = max(0, (int)$it['quantity_ordered'] - (int)$it['quantity_received']);
           ?>
-          <tr>
+          <tr class="po-show-line">
             <td>
               <strong><?= e($it['name']) ?></strong>
               <div class="text-muted text-sm">Sz <?= e($it['size']) ?><?= $it['design'] ? ' · '.e($it['design']) : '' ?> · <?= e($it['gender']) ?></div>
@@ -125,13 +125,17 @@ foreach ($items as $it) {
         </tbody>
       </table>
     </div>
+    <div class="products-pager" id="poLinesPager" hidden>
+      <div class="products-pager-info text-muted text-sm" id="poLinesPagerInfo"></div>
+      <div class="products-pager-btns" id="poLinesPagerBtns"></div>
+    </div>
     <?php if ($canReceive): ?>
     <div class="card-body" style="border-top:1px solid var(--border)">
       <label style="display:flex;align-items:center;gap:.4rem;margin-bottom:.85rem;font-weight:500;text-transform:none;letter-spacing:0;font-size:.84rem">
         <input type="checkbox" name="update_cost" value="1" style="width:auto">
         Update product cost prices from unit costs on received lines
       </label>
-      <button type="submit" class="btn btn-primary" onclick="return confirm('Receive the entered quantities into stock?')">
+      <button type="submit" class="btn btn-primary" onclick="return poConfirmReceive()">
         <i class="fa-solid fa-box-open" aria-hidden="true"></i> Receive stock
       </button>
     </div>
@@ -140,11 +144,67 @@ foreach ($items as $it) {
 </form>
 
 <script>
-document.getElementById('fillRemainingBtn')?.addEventListener('click', () => {
-  document.querySelectorAll('.recv-qty').forEach(inp => {
-    inp.value = inp.dataset.remaining || '0';
+(function () {
+  const PER_PAGE = 10;
+  const rows = [...document.querySelectorAll('tr.po-show-line')];
+  const pager = document.getElementById('poLinesPager');
+  const info = document.getElementById('poLinesPagerInfo');
+  const btns = document.getElementById('poLinesPagerBtns');
+  const totalPages = Math.max(1, Math.ceil(rows.length / PER_PAGE));
+  let page = 1;
+
+  function btn(label, target, opts = {}) {
+    if (opts.current) return '<span class="btn btn-primary btn-sm products-page-current">' + label + '</span>';
+    return '<button type="button" class="btn btn-ghost btn-sm" data-page="' + target + '"' +
+      (opts.disabled ? ' disabled' : '') + (opts.title ? ' title="' + opts.title + '"' : '') + '>' + label + '</button>';
+  }
+
+  function showPage(p) {
+    page = Math.min(Math.max(1, p), totalPages);
+    const start = (page - 1) * PER_PAGE;
+    rows.forEach((tr, i) => { tr.hidden = i < start || i >= start + PER_PAGE; });
+    if (totalPages <= 1) { pager.hidden = true; return; }
+    pager.hidden = false;
+    info.textContent = 'Lines ' + (start + 1) + '–' + Math.min(start + PER_PAGE, rows.length) +
+      ' of ' + rows.length + ' · Page ' + page + ' of ' + totalPages;
+    let html = btn('<i class="fa-solid fa-angles-left" aria-hidden="true"></i>', 1, { disabled: page === 1, title: 'First' }) +
+      btn('<i class="fa-solid fa-chevron-left" aria-hidden="true"></i> Prev', page - 1, { disabled: page === 1 });
+    const from = Math.max(1, page - 2), to = Math.min(totalPages, page + 2);
+    if (from > 1) html += '<span class="products-pager-ellipsis">…</span>';
+    for (let i = from; i <= to; i++) html += btn(String(i), i, { current: i === page });
+    if (to < totalPages) html += '<span class="products-pager-ellipsis">…</span>';
+    html += btn('Next <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>', page + 1, { disabled: page === totalPages }) +
+      btn('<i class="fa-solid fa-angles-right" aria-hidden="true"></i>', totalPages, { disabled: page === totalPages, title: 'Last' });
+    btns.innerHTML = html;
+  }
+
+  btns.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-page]');
+    if (!b || b.disabled) return;
+    showPage(parseInt(b.dataset.page, 10));
+    document.getElementById('receiveForm').scrollIntoView({ block: 'start', behavior: 'smooth' });
   });
-});
+
+  document.getElementById('fillRemainingBtn')?.addEventListener('click', () => {
+    document.querySelectorAll('.recv-qty').forEach(inp => {
+      inp.value = inp.dataset.remaining || '0';
+    });
+  });
+
+  window.poConfirmReceive = function () {
+    const bad = [...document.querySelectorAll('.recv-qty')].find(inp => !inp.checkValidity());
+    if (bad) {
+      showPage(Math.floor(rows.indexOf(bad.closest('tr')) / PER_PAGE) + 1);
+      bad.reportValidity();
+      return false;
+    }
+    const entered = [...document.querySelectorAll('.recv-qty')].filter(inp => parseInt(inp.value || '0', 10) > 0).length;
+    return confirm('Receive the entered quantities into stock?' +
+      (totalPages > 1 ? '\n\n' + entered + ' line' + (entered === 1 ? '' : 's') + ' across all pages have quantities.' : ''));
+  };
+
+  showPage(1);
+})();
 </script>
 <?php
 $content = ob_get_clean();

@@ -3,6 +3,18 @@ $pageTitle = 'Purchases';
 $cp = '/purchases';
 ob_start();
 
+$pagination = $pagination ?? ['page' => 1, 'perPage' => 10, 'total' => count($orders), 'totalPages' => 1];
+$page = (int)$pagination['page'];
+$perPage = (int)$pagination['perPage'];
+$total = (int)$pagination['total'];
+$totalPages = (int)$pagination['totalPages'];
+$from = $total === 0 ? 0 : (($page - 1) * $perPage) + 1;
+$to = min($page * $perPage, $total);
+$qs = static function (array $extra = []) use ($filters): string {
+    $params = array_filter(array_merge($filters, $extra), static fn($v) => $v !== '' && $v !== null);
+    return http_build_query($params);
+};
+
 $statusBadge = static function (string $status): string {
     $map = [
         'draft'     => 'badge-ok',
@@ -35,7 +47,7 @@ $statusBadge = static function (string $status): string {
 <div class="card">
   <div class="card-header">
     <h3><i class="fa-solid fa-truck-ramp-box" aria-hidden="true"></i> Purchase orders</h3>
-    <span class="text-muted text-sm"><?= count($orders) ?> shown</span>
+    <span class="text-muted text-sm"><?= $total ? "Showing {$from}–{$to} of {$total}" : 'None found' ?></span>
   </div>
   <div class="table-wrap">
     <table>
@@ -78,6 +90,43 @@ $statusBadge = static function (string $status): string {
       </tbody>
     </table>
   </div>
+
+  <?php if ($totalPages > 1): ?>
+  <div class="products-pager">
+    <div class="products-pager-info text-muted text-sm">Page <?= $page ?> of <?= $totalPages ?></div>
+    <div class="products-pager-btns">
+      <?php if ($page > 1): ?>
+      <a class="btn btn-ghost btn-sm" href="<?= BASE_PATH ?>/purchases?<?= e($qs(['page' => 1])) ?>" title="First"><i class="fa-solid fa-angles-left" aria-hidden="true"></i></a>
+      <a class="btn btn-ghost btn-sm" href="<?= BASE_PATH ?>/purchases?<?= e($qs(['page' => $page - 1])) ?>"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i> Prev</a>
+      <?php else: ?>
+      <button type="button" class="btn btn-ghost btn-sm" disabled><i class="fa-solid fa-angles-left" aria-hidden="true"></i></button>
+      <button type="button" class="btn btn-ghost btn-sm" disabled><i class="fa-solid fa-chevron-left" aria-hidden="true"></i> Prev</button>
+      <?php endif; ?>
+      <?php
+        $start = max(1, $page - 2);
+        $end = min($totalPages, $page + 2);
+        if ($start > 1) echo '<span class="products-pager-ellipsis">…</span>';
+        for ($i = $start; $i <= $end; $i++):
+          if ($i === $page):
+      ?>
+      <span class="btn btn-primary btn-sm products-page-current"><?= $i ?></span>
+      <?php else: ?>
+      <a class="btn btn-ghost btn-sm" href="<?= BASE_PATH ?>/purchases?<?= e($qs(['page' => $i])) ?>"><?= $i ?></a>
+      <?php
+          endif;
+        endfor;
+        if ($end < $totalPages) echo '<span class="products-pager-ellipsis">…</span>';
+      ?>
+      <?php if ($page < $totalPages): ?>
+      <a class="btn btn-ghost btn-sm" href="<?= BASE_PATH ?>/purchases?<?= e($qs(['page' => $page + 1])) ?>">Next <i class="fa-solid fa-chevron-right" aria-hidden="true"></i></a>
+      <a class="btn btn-ghost btn-sm" href="<?= BASE_PATH ?>/purchases?<?= e($qs(['page' => $totalPages])) ?>" title="Last"><i class="fa-solid fa-angles-right" aria-hidden="true"></i></a>
+      <?php else: ?>
+      <button type="button" class="btn btn-ghost btn-sm" disabled>Next <i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+      <button type="button" class="btn btn-ghost btn-sm" disabled><i class="fa-solid fa-angles-right" aria-hidden="true"></i></button>
+      <?php endif; ?>
+    </div>
+  </div>
+  <?php endif; ?>
 </div>
 <?php
 $content = ob_get_clean();
