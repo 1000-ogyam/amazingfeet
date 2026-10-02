@@ -1,8 +1,23 @@
 <?php
-$pageTitle = 'New purchase';
+$order = $order ?? null;
+$isEdit = $order !== null;
+$pageTitle = $isEdit ? 'Edit '.$order['po_ref'] : 'New purchase';
 $cp = '/purchases';
-$backUrl = BASE_PATH.'/purchases';
+$backUrl = BASE_PATH.'/purchases'.($isEdit ? '/'.(int)$order['id'] : '');
 $products = $products ?? [];
+$initialLines = [];
+foreach ($isEdit ? ($items ?? []) : [] as $it) {
+    $initialLines[] = [
+        'item_id'  => (int)$it['id'],
+        'pid'      => (int)$it['product_id'],
+        'label'    => $it['name'].' · Sz '.$it['size']
+            . (!empty($it['sku']) ? ' · '.$it['sku'] : '')
+            . ' · stock '.(int)$it['stock_qty'],
+        'qty'      => (int)$it['quantity_ordered'],
+        'cost'     => (string)$it['unit_cost'],
+        'received' => (int)$it['quantity_received'],
+    ];
+}
 ob_start();
 
 /** Group size variants into styles for bulk add */
@@ -63,10 +78,20 @@ $stylesList = array_values($styles);
 
 <div class="card">
   <div class="card-header">
+    <?php if ($isEdit): ?>
+    <h3><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> Edit <?= e($order['po_ref']) ?></h3>
+    <span class="text-muted text-sm"><?= e(ucfirst($order['status'])) ?></span>
+    <?php else: ?>
     <h3><i class="fa-solid fa-truck-ramp-box" aria-hidden="true"></i> New purchase / receive stock</h3>
+    <?php endif; ?>
   </div>
   <div class="card-body">
-    <form method="POST" action="<?= BASE_PATH ?>/purchases/create" id="purchaseForm">
+    <?php if ($isEdit && $order['status'] === 'partial'): ?>
+    <div class="alert alert-info" style="margin-bottom:1rem">
+      Some stock on this order has already been received. Those lines can't be removed, and their quantity can't go below what was received.
+    </div>
+    <?php endif; ?>
+    <form method="POST" action="<?= BASE_PATH ?>/purchases/<?= $isEdit ? (int)$order['id'].'/edit' : 'create' ?>" id="purchaseForm">
       <input type="hidden" name="csrf" value="<?= csrf() ?>">
 
       <div class="form-row">
@@ -76,7 +101,7 @@ $stylesList = array_values($styles);
           <select name="supplier_id" id="poSupplierSelect">
             <option value="">— Select supplier —</option>
             <?php foreach ($suppliers as $sup): ?>
-            <option value="<?= (int)$sup['id'] ?>"><?= e($sup['name']) ?></option>
+            <option value="<?= (int)$sup['id'] ?>" <?= $isEdit && (int)($order['supplier_id'] ?? 0) === (int)$sup['id'] ? 'selected' : '' ?>><?= e($sup['name']) ?></option>
             <?php endforeach; ?>
           </select>
           <p class="text-muted text-sm" style="margin:.35rem 0 0">
@@ -86,7 +111,7 @@ $stylesList = array_values($styles);
         </div>
         <div class="form-group">
           <label>Supplier name <span class="text-muted">(optional override)</span></label>
-          <input type="text" name="supplier" id="poSupplierName" placeholder="e.g. Accra Footwear Supply" list="supplierSuggestions">
+          <input type="text" name="supplier" id="poSupplierName" placeholder="e.g. Accra Footwear Supply" list="supplierSuggestions" value="<?= $isEdit ? e($order['supplier'] ?? '') : '' ?>">
           <datalist id="supplierSuggestions">
             <?php foreach ($suppliers as $sup): ?>
             <option value="<?= e($sup['name']) ?>">
@@ -95,7 +120,7 @@ $stylesList = array_values($styles);
         </div>
         <div class="form-group">
           <label>Notes</label>
-          <input type="text" name="notes" placeholder="Invoice #, delivery note…">
+          <input type="text" name="notes" placeholder="Invoice #, delivery note…" value="<?= $isEdit ? e($order['notes'] ?? '') : '' ?>">
         </div>
       </div>
       <script>
@@ -232,6 +257,14 @@ $stylesList = array_values($styles);
         </table>
       </div>
 
+      <?php if ($isEdit): ?>
+      <div class="flex gap-1 product-form-actions" style="flex-wrap:wrap">
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Save changes
+        </button>
+        <a href="<?= BASE_PATH ?>/purchases/<?= (int)$order['id'] ?>" class="btn btn-ghost"><i class="fa-solid fa-xmark" aria-hidden="true"></i> Cancel</a>
+      </div>
+      <?php else: ?>
       <label style="display:flex;align-items:center;gap:.4rem;margin-bottom:1rem;font-weight:500;text-transform:none;letter-spacing:0;font-size:.84rem">
         <input type="checkbox" name="update_cost" value="1" style="width:auto">
         When receiving, update product cost price from unit cost on each line
@@ -249,6 +282,7 @@ $stylesList = array_values($styles);
         </button>
         <a href="<?= BASE_PATH ?>/purchases" class="btn btn-ghost"><i class="fa-solid fa-xmark" aria-hidden="true"></i> Cancel</a>
       </div>
+      <?php endif; ?>
     </form>
   </div>
 </div>
@@ -324,9 +358,15 @@ $stylesList = array_values($styles);
   linesFilter.addEventListener('input', filterLines);
 
   removeShownBtn.addEventListener('click', () => {
-    const rows = visibleLines();
-    if (!rows.length) return;
-    if (!confirm('Remove ' + rows.length + ' line' + (rows.length === 1 ? '' : 's') + ' from this order?')) return;
+    const shownRows = visibleLines();
+    const rows = shownRows.filter(tr => !tr.dataset.received);
+    const locked = shownRows.length - rows.length;
+    if (!rows.length) {
+      if (locked) alert('The shown lines have received stock and cannot be removed.');
+      return;
+    }
+    if (!confirm('Remove ' + rows.length + ' line' + (rows.length === 1 ? '' : 's') + ' from this order?' +
+      (locked ? '\n\n' + locked + ' line' + (locked === 1 ? '' : 's') + ' with received stock will be kept.' : ''))) return;
     rows.forEach(tr => { added.delete(tr.dataset.pid); tr.remove(); });
     linesFilter.value = '';
     refreshEmpty();
@@ -363,7 +403,7 @@ $stylesList = array_values($styles);
     if (doQty && !(q >= 1)) { alert('Enter a quantity of 1 or more.'); qIn.focus(); return; }
     if (doCost && cIn.value === '') { alert('Enter a unit cost first.'); cIn.focus(); return; }
     visibleLines().forEach(tr => {
-      if (doQty) tr.querySelector('.po-qty').value = String(q);
+      if (doQty) tr.querySelector('.po-qty').value = String(Math.max(q, parseInt(tr.dataset.received || '0', 10)));
       if (doCost) tr.querySelector('.po-cost').value = cIn.value;
       lineTotal(tr);
     });
@@ -379,9 +419,10 @@ $stylesList = array_values($styles);
     applyToAllLines(e.target.id === 'poAllQty' ? 'qty' : 'cost');
   });
 
-  function addLine(pid, label, qty, cost) {
+  function addLine(pid, label, qty, cost, opts = {}) {
     pid = String(pid);
     qty = Math.max(1, parseInt(qty || '1', 10));
+    const received = parseInt(opts.received || 0, 10);
     cost = cost !== '' && cost != null ? cost : '0';
     const existing = body.querySelector('tr.po-line[data-pid="' + pid + '"]');
     if (existing) {
@@ -395,12 +436,18 @@ $stylesList = array_values($styles);
     tr.dataset.pid = pid;
     tr.dataset.search = String(label).replace(/·\s*stock\s+-?\d+/i, '').toLowerCase();
     const i = idx++;
+    if (received > 0) tr.dataset.received = String(received);
     tr.innerHTML =
-      '<td><input type="hidden" name="items[' + i + '][product_id]" value="' + pid + '"><strong>' + esc(label) + '</strong></td>' +
-      '<td><input type="number" class="po-qty" name="items[' + i + '][quantity]" min="1" value="' + qty + '" style="width:5rem"></td>' +
+      '<td><input type="hidden" name="items[' + i + '][product_id]" value="' + pid + '">' +
+        (opts.itemId ? '<input type="hidden" name="items[' + i + '][item_id]" value="' + parseInt(opts.itemId, 10) + '">' : '') +
+        '<strong>' + esc(label) + '</strong>' +
+        (received > 0 ? '<div class="text-muted text-sm">' + received + ' already received</div>' : '') + '</td>' +
+      '<td><input type="number" class="po-qty" name="items[' + i + '][quantity]" min="' + Math.max(1, received) + '" value="' + qty + '" style="width:5rem"></td>' +
       '<td><input type="number" class="po-cost" name="items[' + i + '][unit_cost]" step="0.01" min="0" value="' + esc(cost) + '" style="width:7rem"></td>' +
       '<td class="po-line-total text-sm font-bold">GHS 0.00</td>' +
-      '<td><button type="button" class="btn btn-ghost btn-xs po-remove" title="Remove"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></td>';
+      '<td>' + (received > 0
+        ? '<button type="button" class="btn btn-ghost btn-xs" disabled title="Has received stock — cannot remove"><i class="fa-solid fa-lock" aria-hidden="true"></i></button>'
+        : '<button type="button" class="btn btn-ghost btn-xs po-remove" title="Remove"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>') + '</td>';
     body.appendChild(tr);
     added.add(pid);
     lineTotal(tr);
@@ -688,6 +735,17 @@ $stylesList = array_values($styles);
       e.preventDefault();
       alert('Add at least one product line.');
     }
+  });
+
+  // Hidden (filtered-out) inputs can't show validation messages, so show all lines before validating.
+  document.getElementById('purchaseForm').addEventListener('click', (e) => {
+    if (!e.target.closest('button[type="submit"]') || linesFilter.value === '') return;
+    linesFilter.value = '';
+    filterLines();
+  });
+
+  <?= json_encode($initialLines, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>.forEach(l => {
+    addLine(l.pid, l.label, l.qty, l.cost, { itemId: l.item_id, received: l.received });
   });
 
   renderResults();

@@ -146,6 +146,115 @@ class PurchaseOrderModel {
         }
     }
 
+    public static function isEditable(array $po): bool {
+        return in_array($po['status'] ?? '', ['draft', 'ordered', 'partial'], true);
+    }
+
+    /**
+     * Update supplier/notes and lines of an open PO. Lines that already have received
+     * units cannot be removed or reduced below the received quantity.
+     * @param list<array{item_id?:int,product_id:int,quantity:int,unit_cost?:float}> $items
+     */
+    public function update(int $poId, array $header, array $items): void {
+        $po = $this->findById($poId);
+        if (!$po) throw new InvalidArgumentException('Purchase order not found.');
+        if (!self::isEditable($po)) {
+            throw new InvalidArgumentException('Only draft, ordered or partially received orders can be edited.');
+        }
+
+        $existing = [];
+        foreach ($this->getItems($poId) as $it) {
+            $existing[(int)$it['id']] = $it;
+        }
+
+        $keep = [];
+        $new = [];
+        foreach ($items as $row) {
+            $pid = (int)($row['product_id'] ?? 0);
+            $qty = (int)($row['quantity'] ?? 0);
+            if ($pid < 1) continue;
+            $line = ['product_id' => $pid, 'quantity' => $qty, 'unit_cost' => max(0, (float)($row['unit_cost'] ?? 0))];
+            $itemId = (int)($row['item_id'] ?? 0);
+            if ($itemId && isset($existing[$itemId])) {
+                $keep[$itemId] = $line;
+            } elseif ($qty >= 1) {
+                $new[] = $line;
+            }
+        }
+
+        foreach ($existing as $itemId => $it) {
+            $received = (int)$it['quantity_received'];
+            $label = $it['name'] . ' Sz ' . $it['size'];
+            if (!isset($keep[$itemId])) {
+                if ($received > 0) {
+                    throw new InvalidArgumentException("{$label} has {$received} received and cannot be removed.");
+                }
+                continue;
+            }
+            if ($keep[$itemId]['quantity'] < max(1, $received)) {
+                throw new InvalidArgumentException($received > 0
+                    ? "{$label}: quantity cannot be less than the {$received} already received."
+                    : "{$label}: quantity must be at least 1.");
+            }
+        }
+        if (!$keep && !$new) {
+            throw new InvalidArgumentException('Add at least one product with quantity.');
+        }
+
+        $supplierId = !empty($header['supplier_id']) ? (int)$header['supplier_id'] : null;
+        $supplierName = trim((string)($header['supplier'] ?? ''));
+        if ($supplierId && $supplierName === '') {
+            $sup = (new SupplierModel())->findById($supplierId);
+            if ($sup) $supplierName = $sup['name'];
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $this->db->prepare("UPDATE purchase_orders SET supplier=?, supplier_id=?, notes=? WHERE id=?")
+                ->execute([
+                    $supplierName !== '' ? $supplierName : null,
+                    $supplierId,
+                    trim((string)($header['notes'] ?? '')) ?: null,
+                    $poId,
+                ]);
+
+            $del = $this->db->prepare("DELETE FROM purchase_order_items WHERE id=? AND purchase_order_id=? AND quantity_received=0");
+            $upd = $this->db->prepare("UPDATE purchase_order_items SET quantity_ordered=?, unit_cost=? WHERE id=? AND purchase_order_id=?");
+            foreach ($existing as $itemId => $it) {
+                if (isset($keep[$itemId])) {
+                    $upd->execute([$keep[$itemId]['quantity'], $keep[$itemId]['unit_cost'], $itemId, $poId]);
+                } else {
+                    $del->execute([$itemId, $poId]);
+                }
+            }
+
+            $ins = $this->db->prepare("
+                INSERT INTO purchase_order_items (purchase_order_id, product_id, quantity_ordered, quantity_received, unit_cost)
+                VALUES (?,?,?,0,?)
+            ");
+            foreach ($new as $line) {
+                $ins->execute([$poId, $line['product_id'], $line['quantity'], $line['unit_cost']]);
+            }
+
+            if ($po['status'] === 'partial') {
+                $tot = $this->db->prepare("
+                    SELECT COALESCE(SUM(quantity_ordered),0) AS ordered, COALESCE(SUM(quantity_received),0) AS got
+                    FROM purchase_order_items WHERE purchase_order_id=?
+                ");
+                $tot->execute([$poId]);
+                $t = $tot->fetch();
+                if ((int)$t['got'] >= (int)$t['ordered']) {
+                    $this->db->prepare("UPDATE purchase_orders SET status='received' WHERE id=?")->execute([$poId]);
+                }
+            }
+
+            $this->db->commit();
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+    }
+
     /**
      * Receive stock for a PO.
      * @param array<int,int> $receiveMap item_id => qty to receive now

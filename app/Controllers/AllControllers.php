@@ -889,6 +889,39 @@ class PurchaseController {
         }
     }
 
+    public function edit(string $id): void {
+        $order = $this->pom->findById((int)$id);
+        if (!$order) redirect('/purchases');
+        if (!PurchaseOrderModel::isEditable($order)) {
+            flash('error', 'Only draft, ordered or partially received orders can be edited.');
+            redirect('/purchases/'.(int)$id);
+        }
+        view('owner/purchase_form', [
+            'products'  => $this->pm->all([]),
+            'suppliers' => (new SupplierModel())->all(),
+            'order'     => $order,
+            'items'     => $this->pom->getItems((int)$id),
+            'error'     => flash('error'),
+        ]);
+    }
+
+    public function update(string $id): void {
+        verifyCsrf();
+        $poId = (int)$id;
+        try {
+            $this->pom->update($poId, [
+                'supplier'    => trim($_POST['supplier'] ?? ''),
+                'supplier_id' => (int)($_POST['supplier_id'] ?? 0) ?: null,
+                'notes'       => trim($_POST['notes'] ?? ''),
+            ], $this->parseItems($_POST['items'] ?? []));
+            flash('success', 'Purchase order updated.');
+            redirect('/purchases/'.$poId);
+        } catch (Throwable $e) {
+            flash('error', $e->getMessage() ?: 'Could not update purchase order.');
+            redirect('/purchases/'.$poId.'/edit');
+        }
+    }
+
     public function show(string $id): void {
         $order = $this->pom->findById((int)$id);
         if (!$order) redirect('/purchases');
@@ -941,8 +974,10 @@ class PurchaseController {
             if (!is_array($row)) continue;
             $pid = (int)($row['product_id'] ?? 0);
             $qty = (int)($row['quantity'] ?? 0);
-            if ($pid < 1 || $qty < 1) continue;
+            $itemId = (int)($row['item_id'] ?? 0);
+            if ($pid < 1 || ($qty < 1 && $itemId < 1)) continue;
             $out[] = [
+                'item_id'    => $itemId,
                 'product_id' => $pid,
                 'quantity'   => $qty,
                 'unit_cost'  => (float)($row['unit_cost'] ?? 0),

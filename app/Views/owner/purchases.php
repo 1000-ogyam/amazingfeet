@@ -84,6 +84,9 @@ $statusBadge = static function (string $status): string {
           </td>
           <td class="products-actions">
             <a href="<?= BASE_PATH ?>/purchases/<?= (int)$o['id'] ?>" class="btn btn-ghost btn-xs"><i class="fa-solid fa-eye" aria-hidden="true"></i> Open</a>
+            <?php if (PurchaseOrderModel::isEditable($o)): ?>
+            <a href="<?= BASE_PATH ?>/purchases/<?= (int)$o['id'] ?>/edit" class="btn btn-ghost btn-xs"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> Edit</a>
+            <?php endif; ?>
           </td>
         </tr>
         <?php endforeach; ?>

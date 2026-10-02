@@ -33,6 +33,9 @@ foreach ($items as $it) {
       · <span class="badge <?= $statusClass ?>"><?= e(ucfirst($order['status'])) ?></span>
     </div>
   </div>
+  <?php if (PurchaseOrderModel::isEditable($order)): ?>
+  <a href="<?= BASE_PATH ?>/purchases/<?= (int)$order['id'] ?>/edit" class="btn btn-ghost btn-sm"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> Edit</a>
+  <?php endif; ?>
   <?php if ($canOrder): ?>
   <form method="POST" action="<?= BASE_PATH ?>/purchases/<?= (int)$order['id'] ?>/order">
     <input type="hidden" name="csrf" value="<?= csrf() ?>">

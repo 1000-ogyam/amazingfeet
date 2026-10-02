@@ -127,6 +127,8 @@ $routes = [
     ['GET',  '/purchases/create',         'PurchaseController', 'create',           ['owner']],
     ['POST', '/purchases/create',         'PurchaseController', 'store',            ['owner']],
     ['GET',  '/purchases/{id}',           'PurchaseController', 'show',             ['owner']],
+    ['GET',  '/purchases/{id}/edit',      'PurchaseController', 'edit',             ['owner']],
+    ['POST', '/purchases/{id}/edit',      'PurchaseController', 'update',           ['owner']],
     ['POST', '/purchases/{id}/receive',   'PurchaseController', 'receive',          ['owner']],
     ['POST', '/purchases/{id}/order',     'PurchaseController', 'markOrdered',      ['owner']],
     ['POST', '/purchases/{id}/cancel',    'PurchaseController', 'cancel',           ['owner']],
