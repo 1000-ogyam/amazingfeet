@@ -81,7 +81,7 @@ foreach ($items as $it) {
       <?php endif; ?>
     </div>
     <div class="table-wrap">
-      <table>
+      <table data-no-pager>
         <thead>
           <tr>
             <th>Product</th>

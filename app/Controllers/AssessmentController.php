@@ -83,11 +83,11 @@ class AssessmentController {
     public function index(): void {
         requireOwner();
         $filters = array_filter($_GET, fn($v) => $v !== '' && $v !== null);
-        unset($filters['csrf']);
+        unset($filters['csrf'], $filters['page']);
         $filters['staff_only'] = true;
-        $rows = $this->am->all($filters);
+        [$rows, $pagination] = paginateQuery(...$this->am->listQuery($filters));
         $staff = (new UserModel())->allStaff();
-        view('owner/assessments', compact('rows','staff','filters'));
+        view('owner/assessments', compact('rows','staff','filters','pagination'));
     }
 
     public function show(string $id): void {

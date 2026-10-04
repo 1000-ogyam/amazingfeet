@@ -485,8 +485,8 @@ class CustomerController {
 
     public function index(): void {
         $search    = trim($_GET['search'] ?? '');
-        $customers = $this->cm->all($search);
-        view('owner/customers', compact('customers','search'));
+        [$customers, $pagination] = paginateQuery(...$this->cm->listQuery($search));
+        view('owner/customers', compact('customers','search','pagination'));
     }
     public function store(): void {
         verifyCsrf();
@@ -544,11 +544,12 @@ class SalesController {
 
     public function index(): void {
         $filters = array_filter($_GET, fn($v) => $v !== '' && $v !== null);
-        unset($filters['csrf']);
-        $sales     = $this->sm->all($filters);
+        unset($filters['csrf'], $filters['page']);
+        [$sales, $pagination] = paginateQuery(...$this->sm->listQuery($filters));
+        $salesTotal = $this->sm->listTotal($filters);
         $locations = (new LocationModel())->all();
         $staff     = (new UserModel())->allStaff();
-        view('owner/sales', compact('sales','locations','staff','filters'));
+        view('owner/sales', compact('sales','locations','staff','filters','pagination','salesTotal'));
     }
 
     public function view(string $id): void {
@@ -755,7 +756,11 @@ class SalesController {
             }
         } else {
             $filters = array_filter((array)($_POST['filters'] ?? []), fn($v) => $v !== '' && $v !== null);
-            $sales = $this->sm->all($filters);
+            unset($filters['page']);
+            [$sql, $params] = $this->sm->listQuery($filters);
+            $stmt = getDB()->prepare($sql);
+            $stmt->execute($params);
+            $sales = $stmt->fetchAll();
         }
 
         header('Content-Type: text/csv; charset=utf-8');
@@ -1043,9 +1048,9 @@ class SmsCampaignController {
     }
 
     public function index(): void {
-        $campaigns = $this->sms->all(50);
+        [$campaigns, $pagination] = paginateQuery(...$this->sms->listQuery());
         $customerPhoneCount = $this->cm->countWithPhones();
-        view('owner/sms_campaigns', compact('campaigns', 'customerPhoneCount'));
+        view('owner/sms_campaigns', compact('campaigns', 'customerPhoneCount', 'pagination'));
     }
 
     public function create(): void {
@@ -1106,8 +1111,8 @@ class ReturnController {
             'date'   => $_GET['date'] ?? '',
             'search' => trim($_GET['search'] ?? ''),
         ];
-        $returns = $this->rm->all(array_filter($filters, static fn($v) => $v !== '' && $v !== null));
-        view('owner/returns', compact('returns', 'filters'));
+        [$returns, $pagination] = paginateQuery(...$this->rm->listQuery(array_filter($filters, static fn($v) => $v !== '' && $v !== null)));
+        view('owner/returns', compact('returns', 'filters', 'pagination'));
     }
 
     public function show(string $id): void {
@@ -1133,8 +1138,8 @@ class StockHistoryController {
             'product_id' => $_GET['product_id'] ?? '',
         ];
         $pm = new ProductModel();
-        $history = $pm->stockHistory(array_filter($filters, static fn($v) => $v !== '' && $v !== null));
-        view('owner/stock_history', compact('history', 'filters'));
+        [$history, $pagination] = paginateQuery(...$pm->stockHistoryQuery(array_filter($filters, static fn($v) => $v !== '' && $v !== null)));
+        view('owner/stock_history', compact('history', 'filters', 'pagination'));
     }
 }
 
@@ -1167,6 +1172,31 @@ class SupplierController {
         $this->sm->deactivate((int)$id);
         flash('success', 'Supplier deactivated.');
         redirect('/suppliers');
+    }
+}
+
+// ════════════════════════════════════════════════════════════
+//  SettingsController — system switches (SMS on/off)
+// ════════════════════════════════════════════════════════════
+class SettingsController {
+    public function index(): void {
+        view('owner/settings', [
+            'smsEnabled'    => SettingsModel::bool('sms_enabled'),
+            'smsReceipts'   => SettingsModel::bool('sms_receipts'),
+            'smsCampaigns'  => SettingsModel::bool('sms_campaigns'),
+            'smsConfigured' => SmsCampaignModel::isConfigured(),
+        ]);
+    }
+
+    public function save(): void {
+        verifyCsrf();
+        SettingsModel::setMany([
+            'sms_enabled'   => empty($_POST['sms_enabled']) ? '0' : '1',
+            'sms_receipts'  => empty($_POST['sms_receipts']) ? '0' : '1',
+            'sms_campaigns' => empty($_POST['sms_campaigns']) ? '0' : '1',
+        ]);
+        flash('success', 'Settings saved.');
+        redirect('/settings');
     }
 }
 

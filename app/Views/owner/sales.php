@@ -35,9 +35,8 @@
 
   <div class="card">
     <div class="card-header" style="flex-wrap:wrap;gap:.5rem">
-      <h3><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i> Sales <span class="text-muted text-sm">(<?= count($sales) ?>)</span></h3>
-      <?php $totalRev = array_sum(array_column($sales,'total')); ?>
-      <span class="text-sm">Total: <strong class="text-accent"><?= money($totalRev) ?></strong></span>
+      <h3><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i> Sales <span class="text-muted text-sm">(<?= (int)$pagination['total'] ?>)</span></h3>
+      <span class="text-sm">Total: <strong class="text-accent"><?= money($salesTotal) ?></strong></span>
       <div class="ml-auto flex-center gap-1" style="flex-wrap:wrap">
         <span class="text-sm text-muted" id="bulkCount">0 selected</span>
         <button type="submit" name="bulk_action" value="export" class="btn btn-ghost btn-sm" id="bulkExportBtn">
@@ -88,6 +87,7 @@
         </tbody>
       </table>
     </div>
+    <?php require APP_ROOT.'/Views/partials/pager.php'; ?>
   </div>
 </form>
 

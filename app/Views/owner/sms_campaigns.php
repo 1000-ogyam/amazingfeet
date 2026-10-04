@@ -25,10 +25,15 @@ $statusBadge = static function (string $status): string {
   </a>
 </div>
 
+<?php if (!SettingsModel::smsAllowed('campaigns')): ?>
+<div class="alert alert-error"><span class="alert-ic"><i class="fa-solid fa-comment-slash" aria-hidden="true"></i></span>
+  SMS campaigns are switched off. <a href="<?= BASE_PATH ?>/settings">Turn them on in Settings</a> to send new campaigns.</div>
+<?php endif; ?>
+
 <div class="card">
   <div class="card-header">
     <h3><i class="fa-solid fa-comment-sms" aria-hidden="true"></i> Campaign history</h3>
-    <span class="text-muted text-sm"><?= count($campaigns) ?> shown</span>
+    <span class="text-muted text-sm"><?= (int)$pagination['total'] ?> total</span>
   </div>
   <div class="table-wrap">
     <table>
@@ -63,6 +68,7 @@ $statusBadge = static function (string $status): string {
       </tbody>
     </table>
   </div>
+  <?php require APP_ROOT.'/Views/partials/pager.php'; ?>
 </div>
 <?php
 $content = ob_get_clean();

@@ -14,6 +14,14 @@ class SaleReturnModel {
     }
 
     public function all(array $f = []): array {
+        [$sql, $p] = $this->listQuery($f);
+        $stmt = $this->db->prepare($sql . ' LIMIT 200');
+        $stmt->execute($p);
+        return $stmt->fetchAll();
+    }
+
+    /** Returns list SQL (no LIMIT) and its parameters, for paginateQuery(). */
+    public function listQuery(array $f = []): array {
         $w = ['1=1'];
         $p = [];
         if (!empty($f['date'])) {
@@ -25,17 +33,14 @@ class SaleReturnModel {
             $q = '%'.$f['search'].'%';
             array_push($p, $q, $q, $q);
         }
-        $stmt = $this->db->prepare("
+        $sql = "
             SELECT r.*, s.sale_ref, u.name AS processed_by_name
             FROM sale_returns r
             JOIN sales s ON r.sale_id = s.id
             JOIN users u ON r.processed_by = u.id
             WHERE ".implode(' AND ', $w)."
-            ORDER BY r.created_at DESC
-            LIMIT 200
-        ");
-        $stmt->execute($p);
-        return $stmt->fetchAll();
+            ORDER BY r.created_at DESC, r.id DESC";
+        return [$sql, $p];
     }
 
     public function findById(int $id): ?array {

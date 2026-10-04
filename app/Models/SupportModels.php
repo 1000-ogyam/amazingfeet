@@ -134,6 +134,14 @@ class CustomerModel {
         }
         return $this->db->query("SELECT * FROM customers ORDER BY name")->fetchAll();
     }
+    /** Customer list SQL (no LIMIT) and its parameters, for paginateQuery(). */
+    public function listQuery(string $search = ''): array {
+        if ($search !== '') {
+            $q = '%'.$search.'%';
+            return ["SELECT * FROM customers WHERE name LIKE ? OR phone LIKE ? ORDER BY name, id", [$q, $q]];
+        }
+        return ["SELECT * FROM customers ORDER BY name, id", []];
+    }
     public function findById(int $id): ?array {
         $s=$this->db->prepare("SELECT * FROM customers WHERE id=?"); $s->execute([$id]); return $s->fetch()?:null;
     }

@@ -184,7 +184,9 @@
             <label for="custSize">Shoe Size (for records)</label>
             <input type="text" name="customer_size" id="custSize" placeholder="e.g. 32" autocomplete="off">
           </div>
+          <?php if (SettingsModel::smsAllowed('receipts')): ?>
           <p class="pay-modal-hint text-muted text-sm"><i class="fa-solid fa-comment-sms" aria-hidden="true"></i> An SMS receipt is sent to this number after the sale.</p>
+          <?php endif; ?>
         </fieldset>
         <?php if (isOwner()): ?>
         <div class="form-group pay-sale-date">

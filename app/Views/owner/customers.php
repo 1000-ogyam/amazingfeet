@@ -10,7 +10,7 @@
 
 <div style="display:grid;grid-template-columns:1fr 320px;gap:1.25rem;align-items:start">
   <div class="card">
-    <div class="card-header"><h3><i class="fa-solid fa-users" aria-hidden="true"></i> Customers <span class="text-muted text-sm">(<?= count($customers) ?>)</span></h3></div>
+    <div class="card-header"><h3><i class="fa-solid fa-users" aria-hidden="true"></i> Customers <span class="text-muted text-sm">(<?= (int)$pagination['total'] ?>)</span></h3></div>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Name</th><th>Phone</th><th>Shoe Size</th><th>Notes</th><th>Added</th></tr></thead>
@@ -28,6 +28,7 @@
         </tbody>
       </table>
     </div>
+    <?php require APP_ROOT.'/Views/partials/pager.php'; ?>
   </div>
 
   <!-- Add customer -->

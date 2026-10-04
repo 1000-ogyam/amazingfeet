@@ -98,6 +98,14 @@ class SaleModel {
     }
 
     public function all(array $f = []): array {
+        [$sql, $p] = $this->listQuery($f);
+        $stmt = $this->db->prepare($sql . ' LIMIT 500');
+        $stmt->execute($p);
+        return $stmt->fetchAll();
+    }
+
+    /** Sales list SQL (no LIMIT) and its parameters, for paginateQuery(). */
+    public function listQuery(array $f = []): array {
         $w = ['1=1']; $p = [];
         if (!empty($f['date']))        { $w[] = 'DATE(s.created_at)=?'; $p[] = $f['date']; }
         if (!empty($f['staff_id']))    { $w[] = 's.staff_id=?';         $p[] = $f['staff_id']; }
@@ -111,13 +119,19 @@ class SaleModel {
         if (!empty($f['week'])) {
             $w[] = 'YEARWEEK(s.created_at,1)=YEARWEEK(CURDATE(),1)';
         }
-        $stmt = $this->db->prepare("
+        $sql = "
             SELECT s.*, u.name AS staff_name, l.name AS location_name
             FROM sales s JOIN users u ON s.staff_id=u.id JOIN locations l ON s.location_id=l.id
-            WHERE ".implode(' AND ',$w)." ORDER BY s.created_at DESC LIMIT 500
-        ");
+            WHERE ".implode(' AND ',$w)." ORDER BY s.created_at DESC, s.id DESC";
+        return [$sql, $p];
+    }
+
+    /** Revenue across every sale matching the list filters (not just one page). */
+    public function listTotal(array $f = []): float {
+        [$sql, $p] = $this->listQuery($f);
+        $stmt = $this->db->prepare("SELECT COALESCE(SUM(t.total),0) FROM ({$sql}) t");
         $stmt->execute($p);
-        return $stmt->fetchAll();
+        return (float)$stmt->fetchColumn();
     }
 
     /**

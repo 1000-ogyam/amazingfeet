@@ -31,22 +31,27 @@ class AssessmentModel {
     }
 
     public function all(array $f = []): array {
+        [$sql, $p] = $this->listQuery($f);
+        $stmt = $this->db->prepare($sql . ' LIMIT 500');
+        $stmt->execute($p);
+        return $stmt->fetchAll();
+    }
+
+    /** Assessment list SQL (no LIMIT) and its parameters, for paginateQuery(). */
+    public function listQuery(array $f = []): array {
         $w = ['1=1']; $p = [];
         if (!empty($f['staff_only'])) { $w[] = "u.role='staff'"; }
         if (!empty($f['date'])) { $w[] = 'a.report_date=?'; $p[] = $f['date']; }
         if (!empty($f['staff_id'])) { $w[] = 'a.staff_id=?'; $p[] = (int)$f['staff_id']; }
         if (!empty($f['from'])) { $w[] = 'a.report_date>=?'; $p[] = $f['from']; }
         if (!empty($f['to'])) { $w[] = 'a.report_date<=?'; $p[] = $f['to']; }
-        $stmt = $this->db->prepare("
+        $sql = "
             SELECT a.*, u.name AS staff_name
             FROM staff_daily_assessments a
             JOIN users u ON u.id = a.staff_id
             WHERE ".implode(' AND ', $w)."
-            ORDER BY a.report_date DESC, u.name ASC
-            LIMIT 500
-        ");
-        $stmt->execute($p);
-        return $stmt->fetchAll();
+            ORDER BY a.report_date DESC, u.name ASC, a.id DESC";
+        return [$sql, $p];
     }
 
     public function forStaff(int $staffId, int $limit = 60): array {

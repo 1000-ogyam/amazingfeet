@@ -51,6 +51,23 @@ function e(mixed $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, '
 function money(mixed $n): string { return 'GHS '.number_format((float)$n, 2); }
 function formatMoney(mixed $n): string { return number_format((float)$n, 2); }
 
+/**
+ * Run a list query one page at a time (?page=N). $sql must not contain LIMIT.
+ * @return array{0: list<array>, 1: array{page:int, perPage:int, total:int, totalPages:int}}
+ */
+function paginateQuery(string $sql, array $params = [], int $perPage = 10): array {
+    $db = getDB();
+    $count = $db->prepare("SELECT COUNT(*) FROM ({$sql}) pg_count");
+    $count->execute($params);
+    $total = (int)$count->fetchColumn();
+    $totalPages = max(1, (int)ceil($total / $perPage));
+    $page = min(max(1, (int)($_GET['page'] ?? 1)), $totalPages);
+    $offset = ($page - 1) * $perPage;
+    $stmt = $db->prepare("{$sql} LIMIT {$perPage} OFFSET {$offset}");
+    $stmt->execute($params);
+    return [$stmt->fetchAll(), compact('page', 'perPage', 'total', 'totalPages')];
+}
+
 /** Versioned public asset URL (busts Hostinger/browser CSS cache after deploy). */
 function asset(string $path): string {
     $path = '/' . ltrim($path, '/');
@@ -191,6 +208,10 @@ $routes = [
     ['GET',  '/suppliers',                'SupplierController', 'index',            ['owner']],
     ['POST', '/suppliers/create',         'SupplierController', 'store',            ['owner']],
     ['POST', '/suppliers/{id}/delete',    'SupplierController', 'delete',           ['owner']],
+
+    // ── Owner: Settings ───────────────────────────────────────
+    ['GET',  '/settings',                 'SettingsController', 'index',            ['owner']],
+    ['POST', '/settings',                 'SettingsController', 'save',             ['owner']],
 
     // ── Alerts (JSON) ─────────────────────────────────────────
     ['GET',  '/api/alerts',               'ApiController',      'alerts',           ['login']],

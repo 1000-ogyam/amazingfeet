@@ -741,6 +741,14 @@ class ProductModel {
      */
     public function stockHistory(array $f = [], int $limit = 200): array {
         $limit = max(1, min(500, $limit));
+        [$sql, $p] = $this->stockHistoryQuery($f);
+        $stmt = $this->db->prepare($sql . " LIMIT {$limit}");
+        $stmt->execute($p);
+        return $stmt->fetchAll();
+    }
+
+    /** Stock history SQL (no LIMIT) and its parameters, for paginateQuery(). */
+    public function stockHistoryQuery(array $f = []): array {
         $w = ['1=1'];
         $p = [];
         if (!empty($f['product_id'])) {
@@ -774,7 +782,7 @@ class ProductModel {
         }
 
         $skuSelect = $this->hasSkuColumn() ? 'p.sku' : 'NULL AS sku';
-        $stmt = $this->db->prepare("
+        $sql = "
             SELECT a.*, p.name AS product_name, p.size, p.gender, p.design, {$skuSelect},
                    u.name AS user_name,
                    CASE
@@ -786,11 +794,8 @@ class ProductModel {
             JOIN products p ON a.product_id = p.id
             JOIN users u ON a.user_id = u.id
             WHERE ".implode(' AND ', $w)."
-            ORDER BY a.created_at DESC
-            LIMIT {$limit}
-        ");
-        $stmt->execute($p);
-        return $stmt->fetchAll();
+            ORDER BY a.created_at DESC, a.id DESC";
+        return [$sql, $p];
     }
 
     public function softDelete(int $id): void {

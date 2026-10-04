@@ -105,7 +105,7 @@ ob_start();
     </div>
 
     <div class="table-wrap products-table-wrap">
-      <table class="products-table">
+      <table class="products-table" data-no-pager>
         <thead>
           <tr>
             <th class="col-check">

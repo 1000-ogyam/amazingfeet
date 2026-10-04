@@ -138,13 +138,14 @@ class PosController {
             exit;
         }
 
-        if (!$sms['ok']) flash('error', $sms['message']);
+        if ($sms && !$sms['ok']) flash('error', $sms['message']);
         redirect('/pos/receipt/' . $saleId);
     }
 
-    /** @return array{ok:bool,message:string} */
+    /** @return array{ok:bool,message:string}|null  null when receipt SMS is switched off in Settings */
     private function sendReceiptSms(int $saleId, string $saleRef, string $name, string $phone,
-                                    float $discount, float $total, string $payMethod, float $change): array {
+                                    float $discount, float $total, string $payMethod, float $change): ?array {
+        if (!SettingsModel::smsAllowed('receipts')) return null;
         try {
             if (!SmsCampaignModel::isConfigured()) {
                 return ['ok' => false, 'message' => 'SMS receipt not sent: Arkesel is not configured.'];

@@ -22,7 +22,7 @@ $am = new AssessmentModel();
 
 <div class="card">
   <div class="card-header">
-    <h3><i class="fa-solid fa-clipboard-user" aria-hidden="true"></i> Daily assessments <span class="text-muted text-sm">(<?= count($rows) ?>)</span></h3>
+    <h3><i class="fa-solid fa-clipboard-user" aria-hidden="true"></i> Daily assessments <span class="text-muted text-sm">(<?= (int)$pagination['total'] ?>)</span></h3>
   </div>
   <div class="table-wrap">
     <table>
@@ -55,5 +55,6 @@ $am = new AssessmentModel();
       </tbody>
     </table>
   </div>
+  <?php require APP_ROOT.'/Views/partials/pager.php'; ?>
 </div>
 <?php $content = ob_get_clean(); require __DIR__.'/../layouts/main.php'; ?>

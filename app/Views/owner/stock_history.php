@@ -40,7 +40,7 @@ $sourceBadge = static function (string $source): string {
 <div class="card">
   <div class="card-header">
     <h3><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> Stock movements</h3>
-    <span class="text-muted text-sm"><?= count($history) ?> shown</span>
+    <span class="text-muted text-sm"><?= (int)$pagination['total'] ?> total</span>
   </div>
   <div class="table-wrap">
     <table>
@@ -84,6 +84,7 @@ $sourceBadge = static function (string $source): string {
       </tbody>
     </table>
   </div>
+  <?php require APP_ROOT.'/Views/partials/pager.php'; ?>
 </div>
 <?php
 $content = ob_get_clean();

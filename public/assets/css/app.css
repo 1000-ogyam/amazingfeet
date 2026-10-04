@@ -643,6 +643,23 @@ canvas{max-width:100%}
   padding:.75rem 1rem;border-top:1px solid var(--border);background:var(--bg2);
 }
 .products-pager[hidden]{display:none}
+tr[data-pg-hidden]{display:none}
+
+/* Settings switches */
+.settings-grid{max-width:640px}
+.setting-row{display:flex;align-items:flex-start;gap:.85rem;padding:.75rem 0;cursor:pointer;text-transform:none;letter-spacing:0;font-size:.9rem;font-weight:500;margin:0}
+.setting-row + .setting-row{border-top:1px solid var(--border)}
+.setting-desc{display:block;font-weight:400;margin-top:.15rem}
+.setting-switch{position:relative;flex:0 0 auto;width:42px;height:24px;margin-top:.1rem}
+.setting-switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+.setting-slider{position:absolute;inset:0;border-radius:999px;background:var(--border);transition:background .15s}
+.setting-slider::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+.setting-switch input:checked + .setting-slider{background:var(--accent)}
+.setting-switch input:checked + .setting-slider::after{transform:translateX(18px)}
+.setting-switch input:focus-visible + .setting-slider{outline:2px solid var(--accent);outline-offset:2px}
+.setting-children{margin-left:1.4rem;padding-left:1rem;border-left:2px solid var(--border);border-top:1px solid var(--border)}
+.setting-children.is-off{opacity:.45}
+@media print{tr[data-pg-hidden]{display:table-row}}
 .products-pager-btns{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
 .products-pager-btns .btn:disabled{opacity:.4;cursor:not-allowed}
 .products-page-current{pointer-events:none}

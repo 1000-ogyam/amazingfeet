@@ -136,6 +136,10 @@
           <span class="ni"><i class="fa-solid fa-store" aria-hidden="true"></i></span>
           <span class="nav-text">Locations</span>
         </a>
+        <a href="<?= BASE_PATH ?>/settings" class="nav-item <?= str_contains($cp??'','/settings')?'active':'' ?>" title="Settings">
+          <span class="ni"><i class="fa-solid fa-gear" aria-hidden="true"></i></span>
+          <span class="nav-text">Settings</span>
+        </a>
       </div>
       <div class="nav-group">
         <span class="nav-label">Help</span>
@@ -262,6 +266,61 @@ if (collapseBtn) {
 }
 
 backdrop.addEventListener('click', closeMobileSidebar);
+
+// Any table with more than 10 rows shows 10 per page. Skipped: tables marked data-no-pager
+// and editable tables (inputs in rows), whose hidden fields must stay reachable for validation.
+(function () {
+  const PER_PAGE = 10;
+  document.querySelectorAll('.page table').forEach(table => {
+    if (table.hasAttribute('data-no-pager') || table.parentElement.closest('table')) return;
+    const body = table.tBodies[0];
+    if (!body || body.querySelector('input:not([type=checkbox]):not([type=hidden]):not([type=submit]):not([type=button]), select, textarea')) return;
+    const rows = [...body.rows];
+    if (rows.length <= PER_PAGE) return;
+    const totalPages = Math.ceil(rows.length / PER_PAGE);
+    const pager = document.createElement('div');
+    pager.className = 'products-pager table-pager no-print';
+    (table.closest('.table-wrap') || table).after(pager);
+
+    function btn(label, page, opts = {}) {
+      const b = document.createElement(opts.current ? 'span' : 'button');
+      if (!opts.current) b.type = 'button';
+      b.className = 'btn btn-sm ' + (opts.current ? 'btn-primary products-page-current' : 'btn-ghost');
+      b.innerHTML = label;
+      if (opts.title) b.title = opts.title;
+      if (opts.disabled) b.disabled = true;
+      else if (!opts.current) b.addEventListener('click', () => show(page));
+      return b;
+    }
+
+    function show(page) {
+      const start = (page - 1) * PER_PAGE;
+      rows.forEach((tr, i) => tr.toggleAttribute('data-pg-hidden', i < start || i >= start + PER_PAGE));
+      pager.innerHTML = '';
+      const info = document.createElement('div');
+      info.className = 'products-pager-info text-muted text-sm';
+      info.textContent = 'Showing ' + (start + 1) + '–' + Math.min(start + PER_PAGE, rows.length) + ' of ' + rows.length +
+        ' · Page ' + page + ' of ' + totalPages;
+      const btns = document.createElement('div');
+      btns.className = 'products-pager-btns';
+      btns.append(
+        btn('<i class="fa-solid fa-angles-left" aria-hidden="true"></i>', 1, {disabled: page === 1, title: 'First'}),
+        btn('<i class="fa-solid fa-chevron-left" aria-hidden="true"></i> Prev', page - 1, {disabled: page === 1})
+      );
+      const from = Math.max(1, page - 2), to = Math.min(totalPages, page + 2);
+      const dots = () => Object.assign(document.createElement('span'), {className: 'products-pager-ellipsis', textContent: '…'});
+      if (from > 1) btns.append(dots());
+      for (let i = from; i <= to; i++) btns.append(btn(String(i), i, {current: i === page}));
+      if (to < totalPages) btns.append(dots());
+      btns.append(
+        btn('Next <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>', page + 1, {disabled: page === totalPages}),
+        btn('<i class="fa-solid fa-angles-right" aria-hidden="true"></i>', totalPages, {disabled: page === totalPages, title: 'Last'})
+      );
+      pager.append(info, btns);
+    }
+    show(1);
+  });
+})();
 
 window.addEventListener('resize', () => {
   if (!isMobile()) {

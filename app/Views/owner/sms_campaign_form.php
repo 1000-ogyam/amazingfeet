@@ -16,6 +16,11 @@ ob_start();
 <?php if (!empty($error)): ?>
 <div class="alert alert-error"><span class="alert-ic"><i class="fa-solid fa-circle-xmark" aria-hidden="true"></i></span> <?= e($error) ?></div>
 <?php endif; ?>
+<?php $campaignsOn = SettingsModel::smsAllowed('campaigns'); ?>
+<?php if (!$campaignsOn): ?>
+<div class="alert alert-error"><span class="alert-ic"><i class="fa-solid fa-comment-slash" aria-hidden="true"></i></span>
+  SMS campaigns are switched off. <a href="<?= BASE_PATH ?>/settings">Turn them on in Settings</a> to send.</div>
+<?php endif; ?>
 
 <div style="display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:1.25rem;align-items:start">
   <div class="card">
@@ -60,7 +65,7 @@ ob_start();
         </div>
 
         <div class="flex-center gap-2" style="flex-wrap:wrap;margin-top:1rem">
-          <button type="submit" class="btn btn-primary">
+          <button type="submit" class="btn btn-primary" <?= $campaignsOn ? '' : 'disabled' ?>>
             <i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Send SMS
           </button>
           <a href="<?= BASE_PATH ?>/sms" class="btn btn-ghost">Cancel</a>

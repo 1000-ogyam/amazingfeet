@@ -15,15 +15,19 @@ class SmsCampaignModel {
 
     public function all(int $limit = 50): array {
         $limit = max(1, min(200, $limit));
-        $stmt = $this->db->prepare("
+        [$sql] = $this->listQuery();
+        $stmt = $this->db->prepare($sql . " LIMIT {$limit}");
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
+    /** Campaign list SQL (no LIMIT) and its parameters, for paginateQuery(). */
+    public function listQuery(): array {
+        return ["
             SELECT c.*, u.name AS created_by_name
             FROM sms_campaigns c
             JOIN users u ON c.created_by = u.id
-            ORDER BY c.created_at DESC
-            LIMIT {$limit}
-        ");
-        $stmt->execute();
-        return $stmt->fetchAll();
+            ORDER BY c.created_at DESC, c.id DESC", []];
     }
 
     public function findById(int $id): ?array {
@@ -96,6 +100,9 @@ class SmsCampaignModel {
      * @return array{id:int,sent:int,failed:int,total:int,status:string}
      */
     public function createAndSend(array $data, int $userId): array {
+        if (!SettingsModel::smsAllowed('campaigns')) {
+            throw new RuntimeException('SMS campaigns are switched off. Turn them on in Settings to send.');
+        }
         $message = trim((string)($data['message'] ?? ''));
         if ($message === '') {
             throw new InvalidArgumentException('Message is required.');
@@ -222,6 +229,9 @@ class SmsCampaignModel {
      * @return array{ok:bool,error:?string}
      */
     public function sendOne(string $phone, string $message): array {
+        if (!SettingsModel::smsAllowed()) {
+            return ['ok' => false, 'error' => 'SMS is switched off in Settings.'];
+        }
         if (!self::isConfigured()) {
             return ['ok' => false, 'error' => 'Arkesel API key is not configured.'];
         }
