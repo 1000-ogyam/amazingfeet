@@ -86,9 +86,10 @@ $stylesList = array_values($styles);
     <?php endif; ?>
   </div>
   <div class="card-body">
-    <?php if ($isEdit && $order['status'] === 'partial'): ?>
+    <?php if ($isEdit && in_array($order['status'], ['partial', 'received'], true)): ?>
     <div class="alert alert-info" style="margin-bottom:1rem">
-      Some stock on this order has already been received. Those lines can't be removed, and their quantity can't go below what was received.
+      Stock on this order has already been received. Lowering a line below its received quantity, or removing it,
+      takes those units back out of stock. You'll be asked to confirm before saving.
     </div>
     <?php endif; ?>
     <form method="POST" action="<?= BASE_PATH ?>/purchases/<?= $isEdit ? (int)$order['id'].'/edit' : 'create' ?>" id="purchaseForm">
@@ -357,17 +358,31 @@ $stylesList = array_values($styles);
 
   linesFilter.addEventListener('input', filterLines);
 
+  /** Removed lines that had received stock — saving takes those units back out. */
+  const removedReceived = [];
+  function lineLabel(tr) {
+    return tr.querySelector('strong')?.textContent.split(' · stock ')[0] || 'Line';
+  }
+  function removeLine(tr) {
+    if (tr.dataset.received) removedReceived.push({ label: lineLabel(tr), qty: parseInt(tr.dataset.received, 10) });
+    added.delete(tr.dataset.pid);
+    tr.remove();
+  }
+  function stockReductions() {
+    const out = removedReceived.map(r => r.label + ': −' + r.qty + ' (line removed)');
+    body.querySelectorAll('tr.po-line[data-received]').forEach(tr => {
+      const rec = parseInt(tr.dataset.received, 10);
+      const q = parseInt(tr.querySelector('.po-qty').value || '0', 10);
+      if (q >= 1 && q < rec) out.push(lineLabel(tr) + ': −' + (rec - q) + ' (received ' + rec + ', now ' + q + ')');
+    });
+    return out;
+  }
+
   removeShownBtn.addEventListener('click', () => {
-    const shownRows = visibleLines();
-    const rows = shownRows.filter(tr => !tr.dataset.received);
-    const locked = shownRows.length - rows.length;
-    if (!rows.length) {
-      if (locked) alert('The shown lines have received stock and cannot be removed.');
-      return;
-    }
-    if (!confirm('Remove ' + rows.length + ' line' + (rows.length === 1 ? '' : 's') + ' from this order?' +
-      (locked ? '\n\n' + locked + ' line' + (locked === 1 ? '' : 's') + ' with received stock will be kept.' : ''))) return;
-    rows.forEach(tr => { added.delete(tr.dataset.pid); tr.remove(); });
+    const rows = visibleLines();
+    if (!rows.length) return;
+    if (!confirm('Remove ' + rows.length + ' line' + (rows.length === 1 ? '' : 's') + ' from this order?')) return;
+    rows.forEach(removeLine);
     linesFilter.value = '';
     refreshEmpty();
   });
@@ -403,7 +418,7 @@ $stylesList = array_values($styles);
     if (doQty && !(q >= 1)) { alert('Enter a quantity of 1 or more.'); qIn.focus(); return; }
     if (doCost && cIn.value === '') { alert('Enter a unit cost first.'); cIn.focus(); return; }
     visibleLines().forEach(tr => {
-      if (doQty) tr.querySelector('.po-qty').value = String(Math.max(q, parseInt(tr.dataset.received || '0', 10)));
+      if (doQty) tr.querySelector('.po-qty').value = String(q);
       if (doCost) tr.querySelector('.po-cost').value = cIn.value;
       lineTotal(tr);
     });
@@ -442,12 +457,10 @@ $stylesList = array_values($styles);
         (opts.itemId ? '<input type="hidden" name="items[' + i + '][item_id]" value="' + parseInt(opts.itemId, 10) + '">' : '') +
         '<strong>' + esc(label) + '</strong>' +
         (received > 0 ? '<div class="text-muted text-sm">' + received + ' already received</div>' : '') + '</td>' +
-      '<td><input type="number" class="po-qty" name="items[' + i + '][quantity]" min="' + Math.max(1, received) + '" value="' + qty + '" style="width:5rem"></td>' +
+      '<td><input type="number" class="po-qty" name="items[' + i + '][quantity]" min="1" value="' + qty + '" style="width:5rem"></td>' +
       '<td><input type="number" class="po-cost" name="items[' + i + '][unit_cost]" step="0.01" min="0" value="' + esc(cost) + '" style="width:7rem"></td>' +
       '<td class="po-line-total text-sm font-bold">GHS 0.00</td>' +
-      '<td>' + (received > 0
-        ? '<button type="button" class="btn btn-ghost btn-xs" disabled title="Has received stock — cannot remove"><i class="fa-solid fa-lock" aria-hidden="true"></i></button>'
-        : '<button type="button" class="btn btn-ghost btn-xs po-remove" title="Remove"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>') + '</td>';
+      '<td><button type="button" class="btn btn-ghost btn-xs po-remove" title="Remove"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></td>';
     body.appendChild(tr);
     added.add(pid);
     lineTotal(tr);
@@ -717,8 +730,7 @@ $stylesList = array_values($styles);
     if (!btn) return;
     const tr = btn.closest('tr.po-line');
     if (!tr) return;
-    added.delete(tr.dataset.pid);
-    tr.remove();
+    removeLine(tr);
     refreshEmpty();
   });
 
@@ -734,6 +746,11 @@ $stylesList = array_values($styles);
     if (!body.querySelector('tr.po-line')) {
       e.preventDefault();
       alert('Add at least one product line.');
+      return;
+    }
+    const cuts = stockReductions();
+    if (cuts.length && !confirm('Saving will take these received units back out of stock:\n\n' + cuts.join('\n') + '\n\nContinue?')) {
+      e.preventDefault();
     }
   });
 

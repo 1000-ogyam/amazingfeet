@@ -106,21 +106,7 @@ class PosController {
         $tendered  = (float)($_POST['amount_tendered'] ?? $total);
         $change    = $payMethod === 'cash' ? max(0, $tendered - $total) : 0;
 
-        $existing = null;
-        foreach (self::phoneVariants($custPhone, $normPhone) as $variant) {
-            $existing = $this->customers->findByPhone($variant);
-            if ($existing) break;
-        }
-        if ($existing) {
-            $customerId = (int)$existing['id'];
-        } else {
-            $isGhana = strlen($normPhone) === 12 && str_starts_with($normPhone, '233');
-            $customerId = $this->customers->create([
-                'name'      => $custName,
-                'phone'     => $isGhana ? '0' . substr($normPhone, 3) : '+' . $normPhone,
-                'shoe_size' => trim($_POST['customer_size'] ?? ''),
-            ]);
-        }
+        $customerId = $this->customers->findOrCreate($custName, $custPhone, trim($_POST['customer_size'] ?? ''));
 
         $saleRef = $this->sales->generateRef($saleDate);
         $saleId = $this->sales->create([
@@ -154,15 +140,6 @@ class PosController {
 
         if (!$sms['ok']) flash('error', $sms['message']);
         redirect('/pos/receipt/' . $saleId);
-    }
-
-    /** Stored customer phones may be in local (0…), 233… or +233… form. */
-    private static function phoneVariants(string $raw, string $norm): array {
-        $v = [$raw, $norm, '+' . $norm];
-        if (strlen($norm) === 12 && str_starts_with($norm, '233')) {
-            $v[] = '0' . substr($norm, 3);
-        }
-        return array_values(array_unique($v));
     }
 
     /** @return array{ok:bool,message:string} */

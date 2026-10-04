@@ -641,36 +641,78 @@ class SalesController {
     public function edit(string $id): void {
         $sale = $this->sm->findById((int)$id);
         if (!$sale) redirect('/sales');
-        $items     = $this->sm->getItems((int)$id);
-        $locations = (new LocationModel())->all();
-        $staff     = (new UserModel())->all();
         view('owner/sale_edit', [
-            'sale' => $sale,
-            'items' => $items,
-            'locations' => $locations,
-            'staff' => $staff,
-            'error' => flash('error'),
+            'sale'        => $sale,
+            'items'       => $this->sm->getItems((int)$id),
+            'returnedQty' => (new SaleReturnModel())->returnedQtyBySaleItem((int)$id),
+            'products'    => (new ProductModel())->all([]),
+            'locations'   => (new LocationModel())->all(),
+            'staff'       => (new UserModel())->all(),
+            'now'         => $this->sm->dbNow(),
+            'error'       => flash('error'),
         ]);
     }
 
     public function update(string $id): void {
         verifyCsrf();
         $id = (int)$id;
-        if (!$this->sm->findById($id)) redirect('/sales');
+        $sale = $this->sm->findById($id);
+        if (!$sale) redirect('/sales');
         $pay = $_POST['payment_method'] ?? 'cash';
         if (!in_array($pay, ['cash','momo','card','split'], true)) $pay = 'cash';
-        $ok = $this->sm->update($id, [
-            'location_id'     => (int)($_POST['location_id'] ?? 0),
-            'staff_id'        => (int)($_POST['staff_id'] ?? 0),
-            'discount'        => (float)($_POST['discount'] ?? 0),
-            'payment_method'  => $pay,
-            'amount_tendered' => $_POST['amount_tendered'] ?? null,
-            'momo_ref'        => $_POST['momo_ref'] ?? null,
-            'notes'           => $_POST['notes'] ?? null,
-        ]);
-        if ($ok) flash('success', 'Sale updated.');
-        else flash('error', 'Could not update sale.');
-        redirect('/sales/'.$id);
+
+        try {
+            $createdAt = null;
+            $rawWhen = trim($_POST['sale_datetime'] ?? '');
+            if ($rawWhen !== '' && $rawWhen !== date('Y-m-d\TH:i', strtotime($sale['created_at']))) {
+                $dt = DateTime::createFromFormat('Y-m-d\TH:i', $rawWhen);
+                if (!$dt || $dt->format('Y-m-d\TH:i') !== $rawWhen) {
+                    throw new InvalidArgumentException('Enter a valid sale date and time.');
+                }
+                $createdAt = $dt->format('Y-m-d H:i:00');
+                if ($createdAt > $this->sm->dbNow()) {
+                    throw new InvalidArgumentException('Sale date and time cannot be in the future.');
+                }
+            }
+
+            $custName = trim($_POST['customer_name'] ?? '');
+            $custPhone = trim($_POST['customer_phone'] ?? '');
+            $customerId = null;
+            if ($custName !== '' || $custPhone !== '') {
+                if ($custName === '' || $custPhone === '') {
+                    throw new InvalidArgumentException('Enter both customer name and phone, or leave both empty.');
+                }
+                $customerId = (new CustomerModel())->findOrCreate($custName, $custPhone);
+            }
+
+            $items = [];
+            foreach ((array)($_POST['items'] ?? []) as $row) {
+                if (!is_array($row)) continue;
+                $items[] = [
+                    'item_id'    => (int)($row['item_id'] ?? 0),
+                    'product_id' => (int)($row['product_id'] ?? 0),
+                    'quantity'   => (int)($row['quantity'] ?? 0),
+                    'unit_price' => (float)($row['unit_price'] ?? 0),
+                ];
+            }
+
+            $this->sm->update($id, [
+                'location_id'     => (int)($_POST['location_id'] ?? 0),
+                'staff_id'        => (int)($_POST['staff_id'] ?? 0),
+                'customer_id'     => $customerId,
+                'discount'        => (float)($_POST['discount'] ?? 0),
+                'payment_method'  => $pay,
+                'amount_tendered' => $_POST['amount_tendered'] ?? null,
+                'momo_ref'        => $_POST['momo_ref'] ?? null,
+                'notes'           => $_POST['notes'] ?? null,
+                'created_at'      => $createdAt,
+            ], $items);
+            flash('success', 'Sale updated.');
+            redirect('/sales/'.$id);
+        } catch (Throwable $e) {
+            flash('error', $e->getMessage() ?: 'Could not update sale.');
+            redirect('/sales/'.$id.'/edit');
+        }
     }
 
     public function delete(string $id): void {
@@ -893,7 +935,7 @@ class PurchaseController {
         $order = $this->pom->findById((int)$id);
         if (!$order) redirect('/purchases');
         if (!PurchaseOrderModel::isEditable($order)) {
-            flash('error', 'Only draft, ordered or partially received orders can be edited.');
+            flash('error', 'Cancelled purchase orders cannot be edited.');
             redirect('/purchases/'.(int)$id);
         }
         view('owner/purchase_form', [
@@ -909,12 +951,13 @@ class PurchaseController {
         verifyCsrf();
         $poId = (int)$id;
         try {
-            $this->pom->update($poId, [
+            $removed = $this->pom->update($poId, [
                 'supplier'    => trim($_POST['supplier'] ?? ''),
                 'supplier_id' => (int)($_POST['supplier_id'] ?? 0) ?: null,
                 'notes'       => trim($_POST['notes'] ?? ''),
-            ], $this->parseItems($_POST['items'] ?? []));
-            flash('success', 'Purchase order updated.');
+            ], $this->parseItems($_POST['items'] ?? []), (int)$_SESSION['user_id']);
+            flash('success', 'Purchase order updated.'
+                . ($removed ? " {$removed} received unit".($removed === 1 ? '' : 's').' removed from stock.' : ''));
             redirect('/purchases/'.$poId);
         } catch (Throwable $e) {
             flash('error', $e->getMessage() ?: 'Could not update purchase order.');

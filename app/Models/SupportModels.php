@@ -147,6 +147,28 @@ class CustomerModel {
     }
     public function count(): int { return (int)$this->db->query("SELECT COUNT(*) FROM customers")->fetchColumn(); }
 
+    /**
+     * Existing customer matching the phone (stored as 0…, 233… or +233…), or a new one.
+     * New Ghana numbers are stored in local 0XXXXXXXXX form.
+     */
+    public function findOrCreate(string $name, string $phone, string $shoeSize = ''): int {
+        $norm = SmsCampaignModel::normalizePhone($phone);
+        if ($norm === null) {
+            throw new InvalidArgumentException('Enter a valid customer phone number (e.g. 0241234567).');
+        }
+        $isGhana = strlen($norm) === 12 && str_starts_with($norm, '233');
+        $variants = array_unique(array_filter([trim($phone), $norm, '+'.$norm, $isGhana ? '0'.substr($norm, 3) : null]));
+        foreach ($variants as $v) {
+            $existing = $this->findByPhone($v);
+            if ($existing) return (int)$existing['id'];
+        }
+        return $this->create([
+            'name'      => trim($name),
+            'phone'     => $isGhana ? '0'.substr($norm, 3) : '+'.$norm,
+            'shoe_size' => trim($shoeSize) ?: null,
+        ]);
+    }
+
     /** Customers that have a non-empty phone number (for SMS campaigns). */
     public function withPhones(): array {
         return $this->db->query("

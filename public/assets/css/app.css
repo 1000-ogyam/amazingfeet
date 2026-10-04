@@ -587,6 +587,9 @@ canvas{max-width:100%}
 .po-filter-row .po-search-input{flex:1 1 16rem;max-width:26rem}
 .po-lines-apply .po-filter-row input{width:100%}
 .po-filter-row [hidden]{display:none}
+.sale-edit-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:1.25rem;align-items:start}
+.sale-edit-totals{position:sticky;top:1rem}
+@media (max-width:900px){.sale-edit-grid{grid-template-columns:1fr}.sale-edit-totals{position:static}}
 #poLinesFoot th{background:var(--bg3);text-align:left;text-transform:none;letter-spacing:0;font-size:.84rem}
 @media (max-width:640px){
   .po-result{flex-wrap:wrap}

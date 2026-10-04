@@ -13,6 +13,10 @@ class SaleModel {
         return (string)$this->db->query('SELECT CURDATE()')->fetchColumn();
     }
 
+    public function dbNow(): string {
+        return (string)$this->db->query('SELECT NOW()')->fetchColumn();
+    }
+
     /**
      * @param array $sale optional 'sale_date' (Y-m-d) backdates the sale, keeping the current time of day
      * @param bool $useTransaction set false when already inside a parent transaction
@@ -116,38 +120,128 @@ class SaleModel {
         return $stmt->fetchAll();
     }
 
-    public function update(int $id, array $d): bool {
+    /**
+     * Edit a sale's details and line items. Stock moves by the difference in quantities.
+     * Lines that have been (partly) returned cannot be removed or go below the returned quantity.
+     *
+     * @param array $d location_id, staff_id, discount, payment_method, amount_tendered, momo_ref, notes,
+     *                 created_at (Y-m-d H:i:s or null to keep), customer_id (int|null)
+     * @param list<array{item_id?:int,product_id:int,quantity:int,unit_price:float}> $items
+     */
+    public function update(int $id, array $d, array $items): void {
         $sale = $this->findById($id);
-        if (!$sale) return false;
+        if (!$sale) throw new InvalidArgumentException('Sale not found.');
 
-        $discount = max(0, (float)($d['discount'] ?? $sale['discount']));
-        $subtotal = (float)$sale['subtotal'];
-        $total    = max(0, $subtotal - $discount);
+        $existing = [];
+        foreach ($this->getItems($id) as $it) $existing[(int)$it['id']] = $it;
+        $returned = (new SaleReturnModel())->returnedQtyBySaleItem($id);
+
+        $keep = [];
+        $new = [];
+        foreach ($items as $row) {
+            $pid = (int)($row['product_id'] ?? 0);
+            $qty = (int)($row['quantity'] ?? 0);
+            if ($pid < 1) continue;
+            $line = ['product_id' => $pid, 'quantity' => $qty, 'unit_price' => max(0, round((float)($row['unit_price'] ?? 0), 2))];
+            $itemId = (int)($row['item_id'] ?? 0);
+            if ($itemId && isset($existing[$itemId])) $keep[$itemId] = $line;
+            elseif ($qty >= 1) $new[] = $line;
+        }
+        if (!$keep && !$new) throw new InvalidArgumentException('A sale needs at least one item.');
+
+        // Net stock change per product (positive = more units leave stock)
+        $delta = [];
+        foreach ($existing as $itemId => $it) {
+            $label = $it['name'].' Sz '.$it['size'];
+            $ret = $returned[$itemId] ?? 0;
+            $newQty = isset($keep[$itemId]) ? $keep[$itemId]['quantity'] : 0;
+            if (!isset($keep[$itemId]) && $ret > 0) {
+                throw new InvalidArgumentException("{$label} has {$ret} returned and cannot be removed.");
+            }
+            if (isset($keep[$itemId]) && $newQty < max(1, $ret)) {
+                throw new InvalidArgumentException($ret > 0
+                    ? "{$label}: quantity cannot be less than the {$ret} already returned."
+                    : "{$label}: quantity must be at least 1. Remove the item instead.");
+            }
+            $pid = (int)$it['product_id'];
+            $delta[$pid] = ($delta[$pid] ?? 0) + $newQty - (int)$it['quantity'];
+        }
+        $pm = new ProductModel();
+        $products = [];
+        foreach ($new as $line) {
+            $delta[$line['product_id']] = ($delta[$line['product_id']] ?? 0) + $line['quantity'];
+        }
+        foreach ($delta as $pid => $n) {
+            $p = $pm->findById($pid);
+            if (!$p) throw new InvalidArgumentException('A product on this sale no longer exists.');
+            $products[$pid] = $p;
+            if ($n > 0 && (int)$p['quantity'] < $n) {
+                throw new InvalidArgumentException("Not enough stock for {$p['name']} Sz {$p['size']}: {$p['quantity']} available, {$n} more needed.");
+            }
+        }
+
+        $subtotal = 0.0;
+        foreach ($keep as $line) $subtotal += $line['quantity'] * $line['unit_price'];
+        foreach ($new as $line) $subtotal += $line['quantity'] * $line['unit_price'];
+        $discount = min(max(0, (float)($d['discount'] ?? 0)), $subtotal);
+        $total = $subtotal - $discount;
         $payMethod = $d['payment_method'] ?? $sale['payment_method'];
-        $tendered  = isset($d['amount_tendered']) && $d['amount_tendered'] !== ''
-            ? (float)$d['amount_tendered'] : $sale['amount_tendered'];
-        $change = $payMethod === 'cash' && $tendered !== null
-            ? max(0, (float)$tendered - $total) : null;
+        $tendered = isset($d['amount_tendered']) && $d['amount_tendered'] !== '' ? (float)$d['amount_tendered'] : null;
+        if ($payMethod === 'cash' && $tendered !== null && $tendered + 0.005 < $total) {
+            throw new RuntimeException('Amount tendered (' . money($tendered) . ') is less than the new total (' . money($total) . '). Update the amount tendered.');
+        }
+        $change = $payMethod === 'cash' && $tendered !== null ? max(0, $tendered - $total) : null;
 
-        $stmt = $this->db->prepare("
-            UPDATE sales SET
-              location_id=?, staff_id=?, discount=?, total=?,
-              payment_method=?, amount_tendered=?, change_due=?,
-              momo_ref=?, notes=?
-            WHERE id=?
-        ");
-        return $stmt->execute([
-            (int)$d['location_id'],
-            (int)$d['staff_id'],
-            $discount,
-            $total,
-            $payMethod,
-            $tendered,
-            $change,
-            trim((string)($d['momo_ref'] ?? '')) ?: null,
-            trim((string)($d['notes'] ?? '')) ?: null,
-            $id,
-        ]);
+        $this->db->beginTransaction();
+        try {
+            $upd = $this->db->prepare("UPDATE sale_items SET quantity=?, unit_price=?, line_total=? WHERE id=? AND sale_id=?");
+            $del = $this->db->prepare("DELETE FROM sale_items WHERE id=? AND sale_id=?");
+            foreach ($existing as $itemId => $it) {
+                if (isset($keep[$itemId])) {
+                    $l = $keep[$itemId];
+                    $upd->execute([$l['quantity'], $l['unit_price'], $l['quantity'] * $l['unit_price'], $itemId, $id]);
+                } else {
+                    $del->execute([$itemId, $id]);
+                }
+            }
+            $ins = $this->db->prepare("
+                INSERT INTO sale_items (sale_id,product_id,quantity,unit_price,cost_price,line_total) VALUES (?,?,?,?,?,?)
+            ");
+            foreach ($new as $l) {
+                $ins->execute([$id, $l['product_id'], $l['quantity'], $l['unit_price'],
+                    (float)$products[$l['product_id']]['cost_price'], $l['quantity'] * $l['unit_price']]);
+            }
+            foreach ($delta as $pid => $n) {
+                if ($n > 0) $pm->deductStock($pid, $n);
+                elseif ($n < 0) $pm->addStock($pid, -$n);
+            }
+
+            $this->db->prepare("
+                UPDATE sales SET
+                  location_id=?, staff_id=?, customer_id=?, subtotal=?, discount=?, total=?,
+                  payment_method=?, amount_tendered=?, change_due=?, momo_ref=?, notes=?,
+                  created_at=COALESCE(?, created_at)
+                WHERE id=?
+            ")->execute([
+                (int)$d['location_id'],
+                (int)$d['staff_id'],
+                $d['customer_id'] ?? null,
+                $subtotal,
+                $discount,
+                $total,
+                $payMethod,
+                $tendered,
+                $change,
+                trim((string)($d['momo_ref'] ?? '')) ?: null,
+                trim((string)($d['notes'] ?? '')) ?: null,
+                $d['created_at'] ?? null,
+                $id,
+            ]);
+            $this->db->commit();
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
     }
 
     /** Delete sale and restore stock for its line items. */

@@ -147,19 +147,20 @@ class PurchaseOrderModel {
     }
 
     public static function isEditable(array $po): bool {
-        return in_array($po['status'] ?? '', ['draft', 'ordered', 'partial'], true);
+        return in_array($po['status'] ?? '', ['draft', 'ordered', 'partial', 'received'], true);
     }
 
     /**
-     * Update supplier/notes and lines of an open PO. Lines that already have received
-     * units cannot be removed or reduced below the received quantity.
+     * Update supplier/notes and lines of a PO. Lowering a line below its received quantity,
+     * or removing a line with received units, takes that stock back out (logged as a correction).
      * @param list<array{item_id?:int,product_id:int,quantity:int,unit_cost?:float}> $items
+     * @return int units removed from stock
      */
-    public function update(int $poId, array $header, array $items): void {
+    public function update(int $poId, array $header, array $items, int $userId): int {
         $po = $this->findById($poId);
         if (!$po) throw new InvalidArgumentException('Purchase order not found.');
         if (!self::isEditable($po)) {
-            throw new InvalidArgumentException('Only draft, ordered or partially received orders can be edited.');
+            throw new InvalidArgumentException('Cancelled purchase orders cannot be edited.');
         }
 
         $existing = [];
@@ -182,19 +183,10 @@ class PurchaseOrderModel {
             }
         }
 
-        foreach ($existing as $itemId => $it) {
-            $received = (int)$it['quantity_received'];
-            $label = $it['name'] . ' Sz ' . $it['size'];
-            if (!isset($keep[$itemId])) {
-                if ($received > 0) {
-                    throw new InvalidArgumentException("{$label} has {$received} received and cannot be removed.");
-                }
-                continue;
-            }
-            if ($keep[$itemId]['quantity'] < max(1, $received)) {
-                throw new InvalidArgumentException($received > 0
-                    ? "{$label}: quantity cannot be less than the {$received} already received."
-                    : "{$label}: quantity must be at least 1.");
+        foreach ($keep as $itemId => $line) {
+            if ($line['quantity'] < 1) {
+                $it = $existing[$itemId];
+                throw new InvalidArgumentException("{$it['name']} Sz {$it['size']}: quantity must be at least 1. Remove the line instead.");
             }
         }
         if (!$keep && !$new) {
@@ -218,11 +210,23 @@ class PurchaseOrderModel {
                     $poId,
                 ]);
 
-            $del = $this->db->prepare("DELETE FROM purchase_order_items WHERE id=? AND purchase_order_id=? AND quantity_received=0");
-            $upd = $this->db->prepare("UPDATE purchase_order_items SET quantity_ordered=?, unit_cost=? WHERE id=? AND purchase_order_id=?");
+            $pm = new ProductModel();
+            $note = 'PO ' . $po['po_ref'] . ' edit';
+            $unitsRemoved = 0;
+            $del = $this->db->prepare("DELETE FROM purchase_order_items WHERE id=? AND purchase_order_id=?");
+            $upd = $this->db->prepare("
+                UPDATE purchase_order_items SET quantity_ordered=?, quantity_received=?, unit_cost=?
+                WHERE id=? AND purchase_order_id=?
+            ");
             foreach ($existing as $itemId => $it) {
+                $received = (int)$it['quantity_received'];
+                $newReceived = isset($keep[$itemId]) ? min($received, $keep[$itemId]['quantity']) : 0;
+                if ($newReceived < $received) {
+                    $pm->adjustStock((int)$it['product_id'], -($received - $newReceived), 'correction', $note, $userId);
+                    $unitsRemoved += $received - $newReceived;
+                }
                 if (isset($keep[$itemId])) {
-                    $upd->execute([$keep[$itemId]['quantity'], $keep[$itemId]['unit_cost'], $itemId, $poId]);
+                    $upd->execute([$keep[$itemId]['quantity'], $newReceived, $keep[$itemId]['unit_cost'], $itemId, $poId]);
                 } else {
                     $del->execute([$itemId, $poId]);
                 }
@@ -236,19 +240,20 @@ class PurchaseOrderModel {
                 $ins->execute([$poId, $line['product_id'], $line['quantity'], $line['unit_cost']]);
             }
 
-            if ($po['status'] === 'partial') {
+            if ($po['status'] !== 'draft') {
                 $tot = $this->db->prepare("
                     SELECT COALESCE(SUM(quantity_ordered),0) AS ordered, COALESCE(SUM(quantity_received),0) AS got
                     FROM purchase_order_items WHERE purchase_order_id=?
                 ");
                 $tot->execute([$poId]);
                 $t = $tot->fetch();
-                if ((int)$t['got'] >= (int)$t['ordered']) {
-                    $this->db->prepare("UPDATE purchase_orders SET status='received' WHERE id=?")->execute([$poId]);
-                }
+                $status = (int)$t['got'] === 0 ? 'ordered'
+                    : ((int)$t['got'] >= (int)$t['ordered'] ? 'received' : 'partial');
+                $this->db->prepare("UPDATE purchase_orders SET status=? WHERE id=?")->execute([$status, $poId]);
             }
 
             $this->db->commit();
+            return $unitsRemoved;
         } catch (Exception $e) {
             $this->db->rollBack();
             throw $e;
